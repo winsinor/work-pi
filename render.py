@@ -89,6 +89,7 @@ LAYOUT_DEFAULTS: dict = {
         "error":    [{"x": None, "y": None, "h": 24}],
         "shutdown": [{"x": None, "y": None, "h": 40}],
     },
+    "overflow": {"min_font_pct": 60},
 }
 
 _layout_cache: dict = {"data": None, "mtime": 0.0}
@@ -211,7 +212,34 @@ def _load_static_icon(name: str, r: int):
         return None
 
 
+def _load_png_icon(name: str, size: int) -> "Image.Image | None":
+    """Load a user-supplied PNG from icons/<name>.png, scaled to size×size."""
+    if not _PIL_AVAILABLE:
+        return None
+    cache_key = (f"{name}.png", size)
+    if cache_key in _static_icon_cache:
+        return _static_icon_cache[cache_key]
+    path = os.path.join(_ICONS_DIR, f"{name}.png")
+    if not os.path.exists(path):
+        _static_icon_cache[cache_key] = None
+        return None
+    try:
+        img = Image.open(path).convert("RGBA").resize((size, size), Image.LANCZOS)
+        _static_icon_cache[cache_key] = img
+        return img
+    except Exception as exc:
+        print(f"[icon] PNG load failed for {path}: {exc}")
+        _static_icon_cache[cache_key] = None
+        return None
+
+
 def _draw_weather_icon(img, draw, name: str, cx: int, cy: int, r: int):
+    # Priority: user PNG → static SVG → PIL-drawn fallback
+    png = _load_png_icon(name, r * 2)
+    if png is not None:
+        iw, ih = png.size
+        img.paste(png, (cx - iw // 2, cy - ih // 2), png)
+        return
     static = _load_static_icon(name, r)
     if static is not None:
         iw, ih = static.size
@@ -365,6 +393,8 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
 def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     if layout is None:
         layout = load_layout()
+    if "objects" in page:
+        return render_objects_pil(page, layout)
     W  = layout["canvas"]["width"]
     H  = layout["canvas"]["height"]
     hh = layout["header"]["height"]
@@ -574,6 +604,187 @@ def render_page_rgb565(page: dict, layout: dict | None = None,
             buf[i]     = p & 0xFF
             buf[i + 1] = (p >> 8) & 0xFF
     return bytes(buf)
+
+
+def render_objects_pil(page: dict, layout: dict) -> "Image.Image":
+    """Render a page whose content is defined by page["objects"] — a list of typed object dicts.
+
+    Coordinates are center-based: x/y are the center of the object's bounding box.
+    x=None defaults to horizontal canvas center. y=None on text objects triggers
+    automatic even distribution within the content area. All other object types
+    default to canvas center when x/y are omitted.
+    """
+    if not _PIL_AVAILABLE:
+        raise RuntimeError("Pillow is required for rendering (pip3 install Pillow)")
+    W        = layout["canvas"]["width"]
+    H        = layout["canvas"]["height"]
+    gap_min  = layout["content"].get("line_gap_min", 2)
+    min_pct  = float(layout.get("overflow", {}).get("min_font_pct", 60.0))
+
+    objects: list[dict] = list(page.get("objects", []))
+    if page.get("hourly_grid") and not any(o.get("type") == "grid" for o in objects):
+        objects.append({"type": "grid", "data": page["hourly_grid"]})
+
+    # ── Canvas background ──────────────────────────────────────────────────
+    bg_obj  = next((o for o in objects if o.get("type") == "background"), None)
+    bg_col  = _pil_color((bg_obj or {}).get("color", "black"))
+    bg_path = (bg_obj or {}).get("image", "")
+    if bg_path and not os.path.isabs(bg_path):
+        bg_path = os.path.join(_BASE, bg_path)
+    if bg_path and os.path.exists(bg_path):
+        try:
+            img = Image.open(bg_path).convert("RGB").resize((W, H), Image.LANCZOS)
+        except Exception:
+            img = Image.new("RGB", (W, H), bg_col)
+    else:
+        img = Image.new("RGB", (W, H), bg_col)
+    draw = ImageDraw.Draw(img)
+
+    # ── Reserve space for bottom-anchored grids ────────────────────────────
+    grid_h = 0
+    for o in objects:
+        if o.get("type") == "grid" and o.get("y") is None:
+            grid_h = max(grid_h, int(o.get("height") or layout["grid"]["height"]))
+    content_h = H - grid_h
+
+    # ── Auto-Y distribution for text objects with y=None ──────────────────
+    auto_text_idxs = [
+        i for i, o in enumerate(objects)
+        if o.get("type") == "text" and o.get("visible", True) and o.get("y") is None
+    ]
+    auto_y_map: dict[int, int] = {}
+    if auto_text_idxs:
+        heights = []
+        for i in auto_text_idxs:
+            o  = objects[i]
+            f  = _get_font(int(o.get("h", 14)), layout)
+            _, th = _text_size(draw, str(o.get("text", "")), f)
+            heights.append(max(th, int(o.get("h", 14))))
+        total_h = sum(heights)
+        n       = len(heights)
+        gap     = max(gap_min, (content_h - total_h) // (n + 1))
+        for slot, obj_i in enumerate(auto_text_idxs):
+            auto_y_map[obj_i] = gap * (slot + 1) + sum(heights[:slot]) + heights[slot] // 2
+
+    # ── Render each object ─────────────────────────────────────────────────
+    for obj_i, obj in enumerate(objects):
+        otype = obj.get("type")
+        if not obj.get("visible", True) or otype == "background":
+            continue
+
+        if otype == "text":
+            text     = str(obj.get("text", ""))
+            h_pt     = int(obj.get("h", 14))
+            color    = _pil_color(obj.get("color", "white"))
+            align    = obj.get("align", "center")
+            max_w    = obj.get("max_width")
+            overflow = obj.get("overflow", ["shrink", "truncate"])
+            if isinstance(overflow, str):
+                overflow = [overflow]
+            font = _get_font(h_pt, layout)
+            cx   = W // 2 if obj.get("x") is None else int(obj["x"])
+            cy   = auto_y_map.get(obj_i, H // 2) if obj.get("y") is None else int(obj["y"])
+            if max_w is None:
+                lm = layout["content"].get("left_margin", 4)
+                rm = layout["content"].get("right_margin", 4)
+                if align == "center":
+                    max_w = W - lm - rm
+                elif align == "left":
+                    max_w = W - cx - rm
+                else:
+                    max_w = cx - lm
+            tw, th = _text_size(draw, text, font)
+            if tw > max_w:
+                if "shrink" in overflow:
+                    min_h  = max(6, int(h_pt * min_pct / 100.0))
+                    cur_h  = h_pt - 1
+                    while cur_h >= min_h:
+                        font = _get_font(cur_h, layout)
+                        tw, th = _text_size(draw, text, font)
+                        if tw <= max_w:
+                            break
+                        cur_h -= 1
+                if "wrap" in overflow and tw > max_w:
+                    words: list[str] = text.split()
+                    wrap_lines: list[str] = []
+                    cur: list[str] = []
+                    for word in words:
+                        probe = " ".join(cur + [word])
+                        if _text_size(draw, probe, font)[0] <= max_w:
+                            cur.append(word)
+                        else:
+                            if cur:
+                                wrap_lines.append(" ".join(cur))
+                            cur = [word]
+                    if cur:
+                        wrap_lines.append(" ".join(cur))
+                    if len(wrap_lines) > 1:
+                        line_gap  = 2
+                        line_hs   = [_text_size(draw, ln, font)[1] for ln in wrap_lines]
+                        total_wh  = sum(line_hs) + line_gap * (len(wrap_lines) - 1)
+                        ly        = cy - total_wh // 2
+                        for ln, lh in zip(wrap_lines, line_hs):
+                            lw, _ = _text_size(draw, ln, font)
+                            lx = (cx - lw // 2 if align == "center"
+                                  else cx if align == "left" else cx - lw)
+                            draw.text((lx, ly), ln, font=font, fill=color)
+                            ly += lh + line_gap
+                        continue
+                if "truncate" in overflow and tw > max_w:
+                    text = _truncate_to_fit(draw, text, font, max_w)
+                    tw, th = _text_size(draw, text, font)
+            draw_x = (cx - tw // 2 if align == "center"
+                      else cx if align == "left" else cx - tw)
+            draw.text((draw_x, cy - th // 2), text, font=font, fill=color)
+
+        elif otype == "line":
+            draw.line(
+                [(int(obj.get("x1", 0)),  int(obj.get("y1", H // 2))),
+                 (int(obj.get("x2", W)),  int(obj.get("y2", H // 2)))],
+                fill=_pil_color(obj.get("color", "grey")),
+                width=int(obj.get("width", 1)),
+            )
+
+        elif otype == "image":
+            path = obj.get("path", "")
+            if not os.path.isabs(path):
+                path = os.path.join(_BASE, path)
+            if not os.path.exists(path):
+                continue
+            try:
+                pil_img = Image.open(path).convert("RGBA")
+                iw = int(obj["width"])  if "width"  in obj else pil_img.width
+                ih = int(obj["height"]) if "height" in obj else pil_img.height
+                if (iw, ih) != pil_img.size:
+                    pil_img = pil_img.resize((iw, ih), Image.LANCZOS)
+                ix = W // 2 if obj.get("x") is None else int(obj["x"])
+                iy = H // 2 if obj.get("y") is None else int(obj["y"])
+                img.paste(pil_img, (ix - iw // 2, iy - ih // 2), pil_img)
+            except Exception as exc:
+                print(f"[objects] image '{obj.get('path')}': {exc}")
+
+        elif otype == "icon":
+            size = int(obj.get("size", 56))
+            ix   = W // 2 if obj.get("x") is None else int(obj["x"])
+            iy   = H // 2 if obj.get("y") is None else int(obj["y"])
+            _draw_weather_icon(img, draw, obj.get("icon", "sun"), ix, iy, size // 2)
+
+        elif otype == "grid":
+            items = obj.get("data") or []
+            if not items:
+                continue
+            gh       = int(obj.get("height") or layout["grid"]["height"])
+            grid_top = (H - gh) if obj.get("y") is None else int(obj["y"])
+            g_layout = dict(layout)
+            g_layout["grid"] = dict(layout["grid"])
+            for key in ("columns", "label_size", "temp_size", "rain_size", "hum_size", "wind_size"):
+                if key in obj:
+                    g_layout["grid"][key] = obj[key]
+            _render_hourly_grid(draw, items, grid_top, g_layout)
+
+    if page.get("aqi_overlay"):
+        _render_aqi_overlay(draw, page["aqi_overlay"], layout)
+    return img
 
 
 def solid_frame(W: int, H: int, color_rgb: tuple[int, int, int]) -> bytes:

@@ -228,6 +228,25 @@ def build_error_page(msg: str) -> dict:
     }
 
 
+def build_objects_demo_page() -> dict:
+    return {
+        "_name": "objects_demo",
+        "title": "Objects Demo",
+        "objects": [
+            {"type": "text", "text": "Object Layout", "h": 40, "color": "white"},
+            {"type": "text", "text": "center-based coords · auto-Y distribution", "h": 16, "color": "cyan"},
+            {"type": "line", "x1": 20, "y1": 180, "x2": 460, "y2": 180, "color": "grey"},
+            {"type": "text", "text": "Explicit y=200, left-aligned", "h": 16, "color": "green",
+             "align": "left", "x": 20, "y": 200},
+            {"type": "text", "text": "Explicit y=230, right-aligned", "h": 16, "color": "yellow",
+             "align": "right", "x": 460, "y": 230},
+            {"type": "text", "text": "Overflow: shrink + truncate if too long for the canvas width",
+             "h": 18, "color": "orange", "y": 270, "overflow": ["shrink", "truncate"]},
+            {"type": "icon", "icon": "partly_cloudy", "x": 430, "y": 60, "size": 64},
+        ],
+    }
+
+
 def build_shutdown_page() -> dict:
     return {
         "_name": "shutdown",
