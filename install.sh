@@ -39,11 +39,10 @@ apt-get install -y --no-install-recommends \
     python3-pil \
     libatlas-base-dev \
     libopenjp2-7 \
-    libtiff6 \
+    libtiff5 \
     fonts-freefont-ttf \
     fonts-dejavu-core \
     network-manager \
-    nmcli \
     git
 
 # cairosvg system dep (for weather icons — optional; degrades gracefully without)
