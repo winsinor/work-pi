@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Work Dashboard — Setup</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --accent:  #2f81f7;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --text:    #e6edf3;
+    --muted:   #8b949e;
+    --radius:  8px;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; }
+
+  .app { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-bottom: 28px; }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 24px; overflow-x: auto; }
+  .tab { padding: 8px 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 13px; transition: color .15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .section-title { font-weight: 600; font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  .field { margin-bottom: 14px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px; }
+  input[type=text], input[type=password], input[type=number], input[type=url], select, textarea {
+    width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); font-size: 14px; font-family: inherit;
+    outline: none; transition: border-color .15s;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 70px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  .row { display: flex; gap: 12px; }
+  .row .field { flex: 1; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border); cursor: pointer; font-size: 13px; font-family: inherit; transition: background .15s; background: var(--surface); color: var(--text); }
+  .btn:hover { background: var(--border); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1f6feb; border-color: #1f6feb; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #0e3a1a; color: var(--green); }
+  .badge-yellow { background: #2d2000; color: var(--yellow); }
+  .badge-red { background: #3d0c0a; color: var(--red); }
+
+  .tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; padding: 7px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 38px; cursor: text; }
+  .tags-wrap:focus-within { border-color: var(--accent); }
+  .tag { display: inline-flex; align-items: center; gap: 4px; background: #1e3a5f; color: #58a6ff; padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+  .tag button { background: none; border: none; color: inherit; cursor: pointer; padding: 0; font-size: 14px; line-height: 1; opacity: .7; }
+  .tag button:hover { opacity: 1; }
+  .tags-input { border: none; background: none; color: var(--text); font-size: 13px; outline: none; flex: 1; min-width: 80px; padding: 2px 0; }
+
+  .network-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; max-height: 240px; overflow-y: auto; }
+  .network-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; transition: border-color .15s; }
+  .network-item:hover, .network-item.selected { border-color: var(--accent); }
+  .network-ssid { flex: 1; font-size: 13px; }
+  .network-signal { font-size: 12px; color: var(--muted); }
+  .network-security { font-size: 11px; color: var(--muted); }
+  .signal-bar { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .range-val { font-size: 13px; color: var(--text); margin-left: 8px; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 10px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; opacity: 0; transform: translateY(12px); transition: all .25s; pointer-events: none; z-index: 999; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast-success { background: #1a3a1f; color: var(--green); border: 1px solid #2ea043; }
+  .toast-error   { background: #3d0c0a; color: var(--red);   border: 1px solid var(--red); }
+
+  .save-bar { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 12px 0; margin-top: 24px; display: flex; align-items: center; gap: 12px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.complete { background: var(--green); }
+  .status-dot.incomplete { background: var(--yellow); }
+  .status-text { flex: 1; font-size: 13px; color: var(--muted); }
+
+  @media (max-width: 500px) {
+    .row { flex-direction: column; gap: 0; }
+    h1 { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>Work Dashboard Setup</h1>
+  <p class="subtitle">Configure your Pi display. All settings are saved to <code>config.json</code> on the Pi.</p>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="wifi">WiFi</div>
+    <div class="tab" data-tab="location">Location</div>
+    <div class="tab" data-tab="addresses">Addresses</div>
+    <div class="tab" data-tab="keys">API Keys</div>
+    <div class="tab" data-tab="calendar">Calendar</div>
+    <div class="tab" data-tab="keywords">Keywords</div>
+    <div class="tab" data-tab="display">Display</div>
+    <div class="tab" data-tab="intervals">Intervals</div>
+  </div>
+
+  <!-- ── WiFi ── -->
+  <div class="panel active" id="panel-wifi">
+    <div class="section">
+      <div class="section-title">
+        WiFi Connection
+        <span id="wifi-status-badge" class="badge badge-yellow">Checking…</span>
+      </div>
+      <div class="field">
+        <button class="btn" id="btn-scan">⟳ Scan for networks</button>
+      </div>
+      <div id="network-list" class="network-list" style="display:none"></div>
+      <div class="field" id="wifi-password-field" style="display:none; margin-top:12px">
+        <label>Password</label>
+        <input type="password" id="wifi-password" placeholder="Enter WiFi password">
+      </div>
+      <div style="margin-top:12px; display:flex; gap:8px; align-items:center">
+        <button class="btn btn-primary" id="btn-connect" style="display:none">Connect</button>
+        <span id="wifi-connect-status" style="font-size:13px; color:var(--muted)"></span>
+      </div>
+      <p class="hint" style="margin-top:12px">Requires <code>nmcli</code> (NetworkManager). The service must run as root.</p>
+    </div>
+  </div>
+
+  <!-- ── Location ── -->
+  <div class="panel" id="panel-location">
+    <div class="section">
+      <div class="section-title">Location</div>
+      <p class="hint" style="margin-bottom:14px">Used for weather, AQI, and NWS alerts. Find lat/lon at <a href="https://www.latlong.net" target="_blank" style="color:var(--accent)">latlong.net</a>.</p>
+      <div class="row">
+        <div class="field">
+          <label>Latitude</label>
+          <input type="number" id="loc-lat" step="0.0001" placeholder="e.g. 39.1031">
+        </div>
+        <div class="field">
+          <label>Longitude</label>
+          <input type="number" id="loc-lon" step="0.0001" placeholder="e.g. -84.512">
+        </div>
+      </div>
+      <div class="field">
+        <label>Timezone</label>
+        <select id="loc-tz">
+          <option>America/New_York</option>
+          <option>America/Chicago</option>
+          <option>America/Denver</option>
+          <option>America/Los_Angeles</option>
+          <option>America/Phoenix</option>
+          <option>America/Anchorage</option>
+          <option>Pacific/Honolulu</option>
+          <option>Europe/London</option>
+          <option>Europe/Berlin</option>
+          <option>Europe/Paris</option>
+          <option>Asia/Tokyo</option>
+          <option>Asia/Shanghai</option>
+          <option>Australia/Sydney</option>
+        </select>
+        <p class="hint">Used for weather API calls and time display.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Addresses ── -->
+  <div class="panel" id="panel-addresses">
+    <div class="section">
+      <div class="section-title">Addresses</div>
+      <p class="hint" style="margin-bottom:14px">Full street addresses for TomTom routing. Geocoded once at startup.</p>
+      <div class="field">
+        <label>Home address <span style="color:var(--red)">*</span></label>
+        <input type="text" id="addr-home" placeholder="e.g. 123 Main St, Cincinnati, OH 45201">
+      </div>
+      <div class="field">
+        <label>Work address <span style="color:var(--red)">*</span></label>
+        <input type="text" id="addr-work" placeholder="e.g. 7095 Industrial Rd, Florence, KY 41042">
+      </div>
+      <div class="field">
+        <label>Waypoint address <span style="color:var(--muted)">optional</span></label>
+        <input type="text" id="addr-waypoint" placeholder="e.g. daycare, gym, grocery store">
+        <p class="hint">If set, adds a second commute route: Work → Waypoint → Home.</p>
+      </div>
+      <div class="field">
+        <label>Route labels</label>
+        <input type="text" id="route-label-0" placeholder="Work → Home" style="margin-bottom:6px">
+        <input type="text" id="route-label-1" placeholder="Work → Waypoint → Home">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── API Keys ── -->
+  <div class="panel" id="panel-keys">
+    <div class="section">
+      <div class="section-title">API Keys</div>
+      <div class="field">
+        <label>TomTom API key <span style="color:var(--red)">*</span></label>
+        <input type="text" id="key-tomtom" placeholder="Paste your TomTom key here">
+        <p class="hint">
+          Free tier at <a href="https://developer.tomtom.com" target="_blank" style="color:var(--accent)">developer.tomtom.com</a> — needed for geocoding and routing.
+        </p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">No-key APIs</div>
+      <p style="color:var(--muted); font-size:13px">Weather, AQI, and NWS alerts use <strong>Open-Meteo</strong> and <strong>api.weather.gov</strong> — both free, no key needed.</p>
+    </div>
+  </div>
+
+  <!-- ── Calendar ── -->
+  <div class="panel" id="panel-calendar">
+    <div class="section">
+      <div class="section-title">Outlook Calendar</div>
+      <div class="field">
+        <label>ICS / Webcal URL</label>
+        <input type="url" id="cal-ics" placeholder="https://…/calendar.ics">
+        <p class="hint">
+          In Outlook Web: Settings → View all → Calendar → Shared calendars → Publish calendar → copy the ICS link.<br>
+          Leave blank to disable calendar and WFH/OOO detection.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Keywords ── -->
+  <div class="panel" id="panel-keywords">
+    <div class="section">
+      <div class="section-title">WFH / OOO Detection</div>
+      <p class="hint" style="margin-bottom:14px">The app scans today's all-day calendar events. If a title contains any of these keywords the display switches to the matching mode.</p>
+      <div class="field">
+        <label>WFH keywords</label>
+        <div class="tags-wrap" id="tags-wfh"></div>
+        <p class="hint">e.g. <em>wfh</em>, <em>working from home</em></p>
+      </div>
+      <div class="field">
+        <label>OOO keywords</label>
+        <div class="tags-wrap" id="tags-ooo"></div>
+        <p class="hint">e.g. <em>ooo</em>, <em>out of office</em>, <em>pto</em></p>
+      </div>
+      <div class="field">
+        <label>Holiday keywords</label>
+        <div class="tags-wrap" id="tags-holiday"></div>
+        <p class="hint">e.g. <em>holiday</em></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Display ── -->
+  <div class="panel" id="panel-display">
+    <div class="section">
+      <div class="section-title">Screen Resolution</div>
+      <div class="row">
+        <div class="field">
+          <label>Width (px)</label>
+          <input type="number" id="disp-width" min="128" max="1920" step="1">
+        </div>
+        <div class="field">
+          <label>Height (px)</label>
+          <input type="number" id="disp-height" min="128" max="1200" step="1">
+        </div>
+      </div>
+      <p class="hint">Default 480×320. Restart after changing to regenerate layout.</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Framebuffer</div>
+      <div class="field">
+        <label>Framebuffer device</label>
+        <input type="text" id="disp-fb" placeholder="/dev/fb1">
+        <p class="hint">Usually <code>/dev/fb0</code> (primary HDMI) or <code>/dev/fb1</code> (secondary/SPI display). Run <code>ls /dev/fb*</code> on the Pi to check.</p>
+      </div>
+      <div class="field">
+        <label>Rotation (degrees)</label>
+        <select id="disp-rotation">
+          <option value="0">0° (normal)</option>
+          <option value="90">90° (clockwise)</option>
+          <option value="180">180° (upside-down)</option>
+          <option value="270">270° (counter-clockwise)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Default page dwell (seconds)</label>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="range" id="disp-dwell" min="2" max="30" step="1">
+          <span class="range-val" id="disp-dwell-val">8s</span>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">GPIO Buttons</div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" id="btn-enabled" style="width:auto"> Enable GPIO buttons
+        </label>
+        <p class="hint">Uncheck if no physical buttons are wired.</p>
+      </div>
+      <div id="btn-config-fields">
+        <div class="row">
+          <div class="field">
+            <label>Shutdown button GPIO pin</label>
+            <input type="number" id="btn-shutdown-gpio" min="1" max="40">
+            <p class="hint">Long-press to shut down</p>
+          </div>
+          <div class="field">
+            <label>Advance button GPIO pin</label>
+            <input type="number" id="btn-advance-gpio" min="1" max="40">
+            <p class="hint">Press to skip to next page</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Shutdown hold time (seconds)</label>
+            <input type="number" id="btn-hold-secs" min="1" max="30">
+          </div>
+          <div class="field">
+            <label>Pull-up resistor</label>
+            <select id="btn-pull-up">
+              <option value="true">Yes (most HATs)</option>
+              <option value="false">No (pull-down)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Font</div>
+      <div class="field">
+        <label>Font path</label>
+        <input type="text" id="font-path" placeholder="/usr/share/fonts/truetype/freefont/FreeSansBold.ttf">
+        <p class="hint">Must be a TrueType (.ttf) font on the Pi. Install with <code>sudo apt install fonts-freefont-ttf</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Intervals ── -->
+  <div class="panel" id="panel-intervals">
+    <div class="section">
+      <div class="section-title">Update Intervals</div>
+      <div class="field">
+        <label>Weather refresh</label>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="range" id="int-weather" min="60" max="3600" step="60">
+          <span class="range-val" id="int-weather-val"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Commute refresh</label>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="range" id="int-commute" min="60" max="1800" step="60">
+          <span class="range-val" id="int-commute-val"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Calendar / ICS refresh</label>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="range" id="int-calendar" min="60" max="3600" step="60">
+          <span class="range-val" id="int-calendar-val"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label>AQI refresh</label>
+        <div style="display:flex; align-items:center; gap:8px">
+          <input type="range" id="int-aqi" min="60" max="3600" step="60">
+          <span class="range-val" id="int-aqi-val"></span>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Commute Window</div>
+      <p class="hint" style="margin-bottom:14px">The commute page is only shown during this time window (24h).</p>
+      <div class="row">
+        <div class="field">
+          <label>Start hour (0–23)</label>
+          <input type="number" id="commute-start" min="0" max="23">
+        </div>
+        <div class="field">
+          <label>End hour (0–23)</label>
+          <input type="number" id="commute-end" min="0" max="23">
+        </div>
+      </div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" id="commute-weekdays" style="width:auto"> Weekdays only
+        </label>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Setup Server</div>
+      <div class="field">
+        <label>Setup web UI port</label>
+        <input type="number" id="setup-port" min="1024" max="65535">
+        <p class="hint">Default 8080. Change if another service uses this port. Requires restart.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Save bar ── -->
+  <div class="save-bar">
+    <div class="status-dot incomplete" id="status-dot"></div>
+    <span class="status-text" id="status-text">Loading…</span>
+    <button class="btn btn-primary" id="btn-save">Save settings</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmtSec = s => s >= 3600 ? `${s/3600}h` : `${s/60}m`;
+
+function toast(msg, type='success') {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `toast toast-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+function initTags(wrapperId, initial=[]) {
+  const wrap = $(wrapperId);
+  let tags = [...initial];
+
+  function render() {
+    wrap.querySelectorAll('.tag').forEach(e => e.remove());
+    const inp = wrap.querySelector('.tags-input');
+    tags.forEach(t => {
+      const el = document.createElement('span');
+      el.className = 'tag';
+      el.innerHTML = `${escHtml(t)} <button type="button" title="Remove">×</button>`;
+      el.querySelector('button').addEventListener('click', () => { tags = tags.filter(x=>x!==t); render(); });
+      wrap.insertBefore(el, inp);
+    });
+  }
+
+  const inp = document.createElement('input');
+  inp.className = 'tags-input';
+  inp.placeholder = 'Type and press Enter';
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = inp.value.trim().toLowerCase();
+      if (val && !tags.includes(val)) { tags.push(val); render(); }
+      inp.value = '';
+    } else if (e.key === 'Backspace' && !inp.value && tags.length) {
+      tags.pop(); render();
+    }
+  });
+  wrap.addEventListener('click', () => inp.focus());
+  wrap.appendChild(inp);
+  render();
+
+  return {
+    get: () => tags,
+    set: (arr) => { tags = [...arr]; render(); }
+  };
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+const tagWfh     = initTags('tags-wfh');
+const tagOoo     = initTags('tags-ooo');
+const tagHoliday = initTags('tags-holiday');
+
+function bindRange(id, labelId, fmt) {
+  const el = $(id), lbl = $(labelId);
+  const update = () => { lbl.textContent = fmt(+el.value); };
+  el.addEventListener('input', update);
+  update();
+}
+bindRange('disp-dwell',   'disp-dwell-val',   v => `${v}s`);
+bindRange('int-weather',  'int-weather-val',  fmtSec);
+bindRange('int-commute',  'int-commute-val',  fmtSec);
+bindRange('int-calendar', 'int-calendar-val', fmtSec);
+bindRange('int-aqi',      'int-aqi-val',      fmtSec);
+
+$('btn-enabled').addEventListener('change', () => {
+  $('btn-config-fields').style.display = $('btn-enabled').checked ? '' : 'none';
+});
+
+let _cfg = {};
+
+async function loadConfig() {
+  try {
+    const r = await fetch('/api/config');
+    _cfg = await r.json();
+    populateForm(_cfg);
+    updateStatus(_cfg);
+  } catch(e) {
+    toast('Failed to load config: ' + e.message, 'error');
+  }
+}
+
+function populateForm(cfg) {
+  $('loc-lat').value = cfg.location?.lat || '';
+  $('loc-lon').value = cfg.location?.lon || '';
+  const tzSel = $('loc-tz');
+  const tz = cfg.location?.timezone || 'America/New_York';
+  [...tzSel.options].forEach(o => { if(o.value === tz) o.selected = true; });
+  if(![...tzSel.options].some(o=>o.selected)) {
+    const opt = new Option(tz, tz, true, true);
+    tzSel.add(opt);
+  }
+
+  $('addr-home').value    = cfg.addresses?.home    || '';
+  $('addr-work').value    = cfg.addresses?.work    || '';
+  $('addr-waypoint').value = cfg.addresses?.waypoint || '';
+  const rl = cfg.route_labels || [];
+  $('route-label-0').value = rl[0] || 'Work → Home';
+  $('route-label-1').value = rl[1] || 'Work → Waypoint → Home';
+
+  $('key-tomtom').value = cfg.api_keys?.tomtom || '';
+  $('cal-ics').value = cfg.calendar?.ics_url || '';
+
+  tagWfh.set(cfg.wfh_keywords || []);
+  tagOoo.set(cfg.ooo_keywords || []);
+  tagHoliday.set(cfg.holiday_keywords || []);
+
+  $('disp-width').value    = cfg.display?.width    || 480;
+  $('disp-height').value   = cfg.display?.height   || 320;
+  $('disp-fb').value       = cfg.display?.framebuffer || '/dev/fb1';
+  $('disp-rotation').value = String(cfg.display?.rotation ?? 0);
+  $('disp-dwell').value    = cfg.display?.page_dwell_s || 8;
+  $('disp-dwell-val').textContent = `${$('disp-dwell').value}s`;
+
+  const btnEnabled = cfg.buttons?.enabled !== false;
+  $('btn-enabled').checked = btnEnabled;
+  $('btn-config-fields').style.display = btnEnabled ? '' : 'none';
+  $('btn-shutdown-gpio').value = cfg.buttons?.shutdown_gpio ?? 23;
+  $('btn-advance-gpio').value  = cfg.buttons?.advance_gpio  ?? 24;
+  $('btn-hold-secs').value     = cfg.buttons?.shutdown_hold_s ?? 5;
+  $('btn-pull-up').value       = String(cfg.buttons?.pull_up !== false);
+
+  $('font-path').value = cfg.fonts?.path || '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf';
+
+  $('int-weather').value  = cfg.weather?.update_interval_s  || 600;
+  $('int-commute').value  = cfg.commute?.update_interval_s  || 300;
+  $('int-calendar').value = cfg.calendar?.update_interval_s || 600;
+  $('int-aqi').value      = cfg.aqi?.update_interval_s      || 900;
+  ['int-weather','int-commute','int-calendar','int-aqi'].forEach(id => {
+    document.getElementById(id).dispatchEvent(new Event('input'));
+  });
+
+  $('commute-start').value    = cfg.commute?.window_start_h ?? 15;
+  $('commute-end').value      = cfg.commute?.window_end_h   ?? 18;
+  $('commute-weekdays').checked = cfg.commute?.weekdays_only !== false;
+
+  $('setup-port').value = cfg.setup_port || 8080;
+}
+
+function updateStatus(cfg) {
+  const required = [
+    cfg.addresses?.home?.trim(),
+    cfg.addresses?.work?.trim(),
+    cfg.api_keys?.tomtom?.trim(),
+  ];
+  const complete = required.every(Boolean);
+  $('status-dot').className = 'status-dot ' + (complete ? 'complete' : 'incomplete');
+  $('status-text').textContent = complete
+    ? '✓ All required fields are set — display will start automatically'
+    : 'Home address, work address, and TomTom key are required';
+}
+
+function collectForm() {
+  return {
+    location: {
+      lat:      parseFloat($('loc-lat').value) || 0,
+      lon:      parseFloat($('loc-lon').value) || 0,
+      timezone: $('loc-tz').value,
+    },
+    addresses: {
+      home:     $('addr-home').value.trim(),
+      work:     $('addr-work').value.trim(),
+      waypoint: $('addr-waypoint').value.trim(),
+    },
+    route_labels: [
+      $('route-label-0').value.trim() || 'Work → Home',
+      $('route-label-1').value.trim() || 'Work → Waypoint → Home',
+    ],
+    api_keys:  { tomtom: $('key-tomtom').value.trim() },
+    calendar:  {
+      ics_url:          $('cal-ics').value.trim(),
+      update_interval_s: +$('int-calendar').value,
+    },
+    wfh_keywords:     tagWfh.get(),
+    ooo_keywords:     tagOoo.get(),
+    holiday_keywords: tagHoliday.get(),
+    display: {
+      width:        +$('disp-width').value,
+      height:       +$('disp-height').value,
+      framebuffer:  $('disp-fb').value.trim(),
+      rotation:     +$('disp-rotation').value,
+      page_dwell_s: +$('disp-dwell').value,
+    },
+    buttons: {
+      enabled:          $('btn-enabled').checked,
+      shutdown_gpio:    +$('btn-shutdown-gpio').value,
+      advance_gpio:     +$('btn-advance-gpio').value,
+      shutdown_hold_s:  +$('btn-hold-secs').value,
+      pull_up:          $('btn-pull-up').value === 'true',
+    },
+    fonts:   { path: $('font-path').value.trim() },
+    weather: { update_interval_s: +$('int-weather').value },
+    commute: {
+      update_interval_s: +$('int-commute').value,
+      window_start_h:    +$('commute-start').value,
+      window_end_h:      +$('commute-end').value,
+      weekdays_only:     $('commute-weekdays').checked,
+    },
+    aqi:        { update_interval_s: +$('int-aqi').value },
+    setup_port: +$('setup-port').value,
+  };
+}
+
+$('btn-save').addEventListener('click', async () => {
+  const partial = collectForm();
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(partial),
+    });
+    const data = await r.json();
+    if (data.status === 'saved') {
+      toast('Settings saved ✓');
+      _cfg = {..._cfg, ...partial};
+      updateStatus(_cfg);
+      if (data.complete) {
+        setTimeout(() => toast('All required fields set — display starting…'), 1200);
+      }
+    } else {
+      toast(data.error || 'Save failed', 'error');
+    }
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+});
+
+let _selectedSsid = null;
+
+async function checkWifiStatus() {
+  try {
+    const r = await fetch('/api/wifi/status');
+    const d = await r.json();
+    const badge = $('wifi-status-badge');
+    if (d.status === 'connected') {
+      badge.textContent = `Connected: ${d.ssid}`;
+      badge.className = 'badge badge-green';
+    } else {
+      badge.textContent = 'Not connected';
+      badge.className = 'badge badge-yellow';
+    }
+  } catch(e) {
+    $('wifi-status-badge').textContent = 'nmcli unavailable';
+    $('wifi-status-badge').className = 'badge badge-red';
+  }
+}
+
+$('btn-scan').addEventListener('click', async () => {
+  $('btn-scan').textContent = '⟳ Scanning…';
+  $('btn-scan').disabled = true;
+  try {
+    const r = await fetch('/api/wifi/scan');
+    const d = await r.json();
+    const list = $('network-list');
+    list.innerHTML = '';
+    (d.networks || []).forEach(net => {
+      if (net.error) {
+        list.innerHTML = `<p style="color:var(--red);font-size:13px">${escHtml(net.error)}</p>`;
+        return;
+      }
+      const bars = net.signal >= 75 ? '▂▄▆█' : net.signal >= 50 ? '▂▄▆' : net.signal >= 25 ? '▂▄' : '▂';
+      const item = document.createElement('div');
+      item.className = 'network-item';
+      item.innerHTML = `<span class="network-ssid">${escHtml(net.ssid)}</span><span class="network-signal">${bars} ${net.signal}%</span><span class="network-security">${escHtml(net.security)}</span>`;
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.network-item').forEach(i=>i.classList.remove('selected'));
+        item.classList.add('selected');
+        _selectedSsid = net.ssid;
+        const needsPass = net.security !== 'Open' && net.security !== '--';
+        $('wifi-password-field').style.display = needsPass ? '' : 'none';
+        $('wifi-password').value = '';
+        $('btn-connect').style.display = '';
+      });
+      list.appendChild(item);
+    });
+    list.style.display = d.networks?.length ? '' : 'none';
+    if (!d.networks?.length) list.innerHTML = '<p style="color:var(--muted);font-size:13px">No networks found</p>';
+  } catch(e) {
+    toast('Scan failed: ' + e.message, 'error');
+  } finally {
+    $('btn-scan').textContent = '⟳ Scan for networks';
+    $('btn-scan').disabled = false;
+  }
+});
+
+$('btn-connect').addEventListener('click', async () => {
+  if (!_selectedSsid) return;
+  const password = $('wifi-password').value;
+  $('wifi-connect-status').textContent = 'Connecting…';
+  $('btn-connect').disabled = true;
+  try {
+    const r = await fetch('/api/wifi/connect', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ssid: _selectedSsid, password}),
+    });
+    const d = await r.json();
+    if (d.status === 'connected') {
+      $('wifi-connect-status').textContent = `Connected to ${d.ssid}`;
+      toast(`Connected to ${d.ssid} ✓`);
+      checkWifiStatus();
+    } else {
+      $('wifi-connect-status').textContent = d.message || 'Connection failed';
+      toast(d.message || 'Connection failed', 'error');
+    }
+  } catch(e) {
+    $('wifi-connect-status').textContent = 'Error: ' + e.message;
+    toast('Connect error: ' + e.message, 'error');
+  } finally {
+    $('btn-connect').disabled = false;
+  }
+});
+
+loadConfig();
+checkWifiStatus();
+</script>
+</body>
+</html>
