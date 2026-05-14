@@ -1,0 +1,7 @@
+requests
+Pillow
+icalendar
+recurring-ical-events
+cairosvg
+gpiozero
+RPi.GPIO

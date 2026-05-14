@@ -1,0 +1,57 @@
+{
+  "canvas": {"width": 480, "height": 320},
+  "header": {"height": 0, "bg": [0, 0, 80], "title_color": "white"},
+  "footer": {"height": 0},
+  "content": {"left_margin": 6, "right_margin": 6, "line_gap_min": 2},
+  "icon":   {"radius": 107, "gap": 10, "x": 390, "y": 107},
+  "aqi":    {"cx": 231, "y": 16, "label_size": 21, "value_size": 35},
+  "grid":   {"height": 87, "columns": 5, "label_size": 18, "temp_size": 24, "rain_size": 18, "hum_size": 12, "wind_size": 12},
+  "pages": {
+    "clock":          {"enabled": true, "dwell_seconds": 8},
+    "forecast":       {"enabled": true, "dwell_seconds": 10},
+    "calendar":       {"enabled": true, "dwell_seconds": 12},
+    "calendar_empty": {"enabled": true, "dwell_seconds": 8},
+    "commute":        {"enabled": true, "dwell_seconds": 10}
+  },
+  "line_positions": {
+    "clock": [
+      {"x": null, "y": 147, "h": 94},
+      {"x": null, "y": 231, "h": 38},
+      {"x": null, "y": 73,  "h": 38}
+    ],
+    "forecast": [
+      {"x": 97,  "y": 36,  "h": 64},
+      {"x": 10,  "y": 127, "h": 32},
+      {"x": 10,  "y": 87,  "h": 27},
+      {"x": 10,  "y": 163, "h": 27},
+      {"x": 334, "y": 163, "h": 24},
+      {"x": 339, "y": 192, "h": 24},
+      {"x": 10,  "y": 199, "h": 27}
+    ],
+    "calendar": [
+      {"x": null, "y": 64,  "h": 40},
+      {"x": null, "y": 140, "h": 48},
+      {"x": null, "y": 208, "h": 32},
+      {"x": 136,  "y": 268, "h": 19}
+    ],
+    "calendar_empty": [
+      {"x": null, "y": 128, "h": 40},
+      {"x": null, "y": 189, "h": 40}
+    ],
+    "commute": [
+      {"x": null, "y": null, "h": 32},
+      {"x": null, "y": null, "h": 43},
+      {"x": null, "y": null, "h": 21},
+      {"x": null, "y": null, "h": 32},
+      {"x": null, "y": null, "h": 43},
+      {"x": null, "y": null, "h": 21}
+    ],
+    "wfh":      [{"x": 240, "y": null, "h": 40}],
+    "ooo":      [{"x": null, "y": 147, "h": 48}, {"x": null, "y": 196, "h": 19}],
+    "holiday":  [{"x": null, "y": null, "h": 37}],
+    "setup":    [{"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 32}, {"x": null, "y": null, "h": 18}],
+    "loading":  [{"x": null, "y": null, "h": 24}],
+    "error":    [{"x": null, "y": null, "h": 24}],
+    "shutdown": [{"x": null, "y": null, "h": 40}]
+  }
+}

@@ -1,0 +1,21 @@
+[Unit]
+Description=Work Dashboard Display
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/work-dashboard
+ExecStart=/usr/bin/python3 /home/pi/work-dashboard/work_display.py
+Restart=always
+RestartSec=10
+# Root is required so nmcli can manage WiFi from the setup web UI.
+# If you don't need WiFi management, you can run as 'pi' and add
+# the pi user to the 'netdev' group instead:
+#   User=pi
+#   ExecStart=... (same)
+# then: sudo usermod -aG netdev pi
+
+[Install]
+WantedBy=multi-user.target
