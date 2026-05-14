@@ -1,0 +1,69 @@
+{
+  "wifi": {
+    "ssid": "MyNetwork",
+    "password": "hunter2"
+  },
+  "location": {
+    "lat": 39.1031,
+    "lon": -84.512,
+    "timezone": "America/New_York"
+  },
+  "addresses": {
+    "home":     "123 Main St, Cincinnati, OH 45201",
+    "work":     "456 Office Blvd, Florence, KY 41042",
+    "waypoint": "789 Daycare Ln, Erlanger, KY 41018"
+  },
+  "api_keys": {
+    "tomtom": "YOUR_TOMTOM_API_KEY"
+  },
+  "display": {
+    "width":        480,
+    "height":       320,
+    "framebuffer":  "/dev/fb1",
+    "rotation":     0,
+    "page_dwell_s": 8
+  },
+  "buttons": {
+    "enabled":         true,
+    "shutdown_gpio":   23,
+    "advance_gpio":    24,
+    "shutdown_hold_s": 5,
+    "pull_up":         true
+  },
+  "fonts": {
+    "path": "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "fallback_paths": [
+      "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+      "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+      "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"
+    ]
+  },
+  "calendar": {
+    "ics_url":          "https://outlook.office365.com/owa/calendar/…/calendar.ics",
+    "update_interval_s": 600
+  },
+  "weather": {
+    "update_interval_s": 600
+  },
+  "commute": {
+    "update_interval_s": 300,
+    "window_start_h":   15,
+    "window_end_h":     18,
+    "weekdays_only":    true
+  },
+  "aqi": {
+    "update_interval_s": 900
+  },
+  "alerts": {
+    "update_interval_s": 600
+  },
+  "display_cache_s": 60,
+  "setup_port": 8080,
+  "route_labels": [
+    "Work → Home",
+    "Work → Daycare → Home"
+  ],
+  "wfh_keywords":     ["wfh", "working from home"],
+  "ooo_keywords":     ["ooo", "out of office", "pto"],
+  "holiday_keywords": ["holiday"]
+}
