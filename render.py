@@ -153,10 +153,16 @@ def _scale_layout(layout: dict, sx: float, sy: float, sf: float,
     def sf_(v): return max(8, round(v * sf)) if v is not None else None
 
     ic = layout.get("icon", {})
-    ic["radius"] = sf_(ic.get("radius"))
+    grid_h = sy_(layout.get("grid", {}).get("height", 0)) or 0
+    max_r  = min(
+        (h - grid_h) // 2 - 4,       # fit vertically above the grid
+        w // 4,                        # at most a quarter of display width
+    )
+    ic["radius"] = min(sf_(ic.get("radius")), max_r)
     ic["gap"]    = sx_(ic.get("gap"))
-    ic["x"]      = sx_(ic.get("x"))
-    ic["y"]      = sy_(ic.get("y"))
+    # clamp x so the icon circle doesn't overflow the right edge
+    ic["x"]      = min(w - ic["radius"] - 4, sx_(ic.get("x")))
+    ic["y"]      = min(h - grid_h - ic["radius"] - 4, sy_(ic.get("y")))
 
     aq = layout.get("aqi", {})
     aq["cx"]         = sx_(aq.get("cx"))
