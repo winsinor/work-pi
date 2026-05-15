@@ -64,6 +64,7 @@ will work. The most common options:
 
 | Display | Resolution | Interface | Driver / Overlay |
 |---|---|---|---|
+| **Generic 2.4"/2.8" RPi Display** (ILI9341, XPT2046) | 320×240 | SPI | `ili9341` — see [setup notes](#generic-24-28-rpi-display-ili9341) |
 | Waveshare 3.5" (A/B/C) | 480×320 | SPI | `waveshare35a`, `waveshare35b`, `waveshare35c` |
 | Waveshare 3.5" (E/F) | 480×320 | SPI | `waveshare35e` |
 | Waveshare 2.8" | 320×240 | SPI | `waveshare28` |
@@ -144,7 +145,59 @@ Skip this section if you're using an HDMI monitor — it uses `/dev/fb0` automat
 
 Most SPI displays use a device tree overlay. The method depends on your display.
 
-**Option A — Waveshare displays (most common)**
+**Option A — Generic 2.4"/2.8" RPi Display (ILI9341 + XPT2046)** {#generic-24-28-rpi-display-ili9341}
+
+These blue HAT-style boards labelled "2.4/2.8inch RPi Display, 320×240 Pixel, XPT2046 Touch Controller"
+are common on Amazon and AliExpress. They use an **ILI9341** display controller and plug
+directly onto the 40-pin GPIO header.
+
+```bash
+sudo nano /boot/config.txt
+```
+
+Add at the bottom:
+```
+dtoverlay=ili9341,speed=32000000,fps=25,bgr=0,rotate=90
+```
+
+> If the display shows at the wrong angle, try `rotate=270`. If colours look
+> wrong (blue/red swapped), add `bgr=1`.
+
+Reboot:
+```bash
+sudo reboot
+```
+
+After rebooting, the display should appear as `/dev/fb1`. Test it:
+```bash
+sudo cat /dev/urandom > /dev/fb1
+```
+
+If the screen fills with coloured static, the driver is working.
+
+> **Pi 1 B+ note**: The `ili9341` overlay is included in the mainline kernel and
+> works on ARMv6. No additional driver installation is required.
+
+> **If `/dev/fb1` does not appear**: the kernel may not have the `fbtft` module
+> built in. Try installing it:
+> ```bash
+> sudo apt install raspberrypi-kernel-headers
+> sudo modprobe fbtft_device name=adafruit28 gpios=dc:24,reset:25 speed=32000000 fps=25
+> ```
+> Then add it to `/etc/modules` to load on boot:
+> ```
+> fbtft_device name=adafruit28 gpios=dc:24,reset:25 speed=32000000 fps=25
+> ```
+
+**In the setup UI**, set:
+- Width: `320`, Height: `240`
+- Framebuffer device: `/dev/fb1`
+
+And scale `work_layout.json` for 320×240 — see [Resolution presets](#resolution-presets).
+
+---
+
+**Option B — Waveshare displays**
 
 ```bash
 # Download and run the Waveshare installer
@@ -158,7 +211,7 @@ sudo ./LCD35B-show
 # The Pi will reboot. SSH back in after.
 ```
 
-**Option B — `/boot/config.txt` overlay (Adafruit / generic)**
+**Option C — `/boot/config.txt` overlay (Adafruit / other generic)**
 
 ```bash
 sudo nano /boot/config.txt
@@ -608,12 +661,21 @@ The default layout targets **480×320**. To adapt for other resolutions,
 scale all `x`, `y`, `h`, `radius`, `cx`, and grid size values by the
 appropriate factor:
 
-| Resolution | Scale x | Scale y | Scale fonts |
-|---|---|---|---|
-| 320×240 | ×0.67 | ×0.75 | ×0.71 |
-| 480×320 | ×1.00 | ×1.00 | ×1.00 (default) |
-| 640×480 | ×1.33 | ×1.50 | ×1.41 |
-| 800×480 | ×1.67 | ×1.50 | ×1.58 |
+| Resolution | Scale x | Scale y | Scale fonts | Common display |
+|---|---|---|---|---|
+| 320×240 | ×0.67 | ×0.75 | ×0.71 | Generic 2.4"/2.8" ILI9341 HAT |
+| 480×320 | ×1.00 | ×1.00 | ×1.00 (default) | Waveshare 3.5" A/B/C, Adafruit PiTFT 3.5" |
+| 640×480 | ×1.33 | ×1.50 | ×1.41 | — |
+| 800×480 | ×1.67 | ×1.50 | ×1.58 | Pimoroni HyperPixel 4 |
+
+**Example `work_layout.json` canvas for 320×240** (generic 2.4"/2.8" display):
+
+```json
+"canvas": {"width": 320, "height": 240}
+```
+
+Apply the ×0.67 / ×0.75 / ×0.71 scale to all `x`, `y`, and `h` values in
+`line_positions`, and scale `radius`, `cx`, and grid sizes proportionally.
 
 ---
 
