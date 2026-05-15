@@ -209,6 +209,7 @@ _server: HTTPServer | None = None
 def start(port: int) -> str:
     """Start the setup HTTP server in a daemon thread. Returns the local IP."""
     global _server
+    HTTPServer.allow_reuse_address = True
     _server = HTTPServer(("0.0.0.0", port), SetupHandler)
 
     def _run():
