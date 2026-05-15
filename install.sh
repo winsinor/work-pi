@@ -71,15 +71,22 @@ else
     PIP_EXTRA=""
 fi
 
+# Wait for DNS to be ready (network may still be coming up after NetworkManager start)
+info "    Waiting for network …"
+for i in 1 2 3 4 5; do
+    ping -c1 -W2 pypi.org &>/dev/null && break
+    [[ "$i" -eq 5 ]] && die "No network after 10s — check WiFi and try again"
+    sleep 2
+done
+
 # shellcheck disable=SC2086
 $PYTHON -m pip install --upgrade pip --quiet
-$PYTHON -m pip install $PIP_EXTRA \
-    requests \
-    icalendar \
-    "recurring-ical-events>=2.0" \
-    gpiozero \
-    RPi.GPIO \
-    --quiet || true
+pip_packages=(requests icalendar "recurring-ical-events>=2.0" gpiozero RPi.GPIO)
+for pkg in "${pip_packages[@]}"; do
+    # shellcheck disable=SC2086
+    $PYTHON -m pip install $PIP_EXTRA "$pkg" --quiet \
+        || { red "    FAILED to install $pkg — run:  pip3 install $pkg"; }
+done
 
 # cairosvg is optional — SVG icon rendering; skip on low-mem devices
 if [[ "$TOTAL_KB" -gt 524288 ]]; then
