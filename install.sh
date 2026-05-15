@@ -54,8 +54,24 @@ apt-get install -y --no-install-recommends \
     libcairo2 libcairo2-dev libgdk-pixbuf2.0-0 libffi-dev \
     || info "    cairosvg native libs not available — SVG icons will be skipped"
 
-# ── NetworkManager: ensure it manages the WiFi interface ──────────────────────
-info "==> Ensuring NetworkManager is active …"
+# ── NetworkManager: install but don't break existing WiFi ─────────────────────
+info "==> Configuring NetworkManager …"
+
+# Disable the wait-online service — it blocks boot if WiFi credentials are
+# not yet configured in NM (common on fresh installs over wpa_supplicant).
+systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
+
+# If wpa_supplicant is managing WiFi already, tell NM not to fight it.
+# The setup UI can take over later once credentials are entered there.
+if systemctl is-active --quiet wpa_supplicant; then
+    info "    wpa_supplicant is active — configuring NM to leave WiFi alone for now"
+    mkdir -p /etc/NetworkManager/conf.d
+    cat > /etc/NetworkManager/conf.d/99-unmanaged-wifi.conf <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:wlan0
+EOF
+fi
+
 systemctl enable NetworkManager 2>/dev/null || true
 systemctl start  NetworkManager 2>/dev/null || true
 
