@@ -195,7 +195,7 @@ def main():
     default_dwell = cfg["display"].get("page_dwell_s", 8)
     font_path = cfg_module.resolve_font_path(cfg)
 
-    layout = load_layout(font_path)
+    layout = load_layout(font_path, display_w=W, display_h=H)
 
     if not cfg_module.is_complete(cfg):
         _run_setup_mode(cfg.get("setup_port", 8080), layout, cfg)

@@ -94,8 +94,15 @@ LAYOUT_DEFAULTS: dict = {
 _layout_cache: dict = {"data": None, "mtime": 0.0}
 
 
-def load_layout(font_path: str | None = None) -> dict:
-    """Merge work_layout.json over LAYOUT_DEFAULTS; cache by file mtime."""
+def load_layout(font_path: str | None = None,
+                display_w: int | None = None,
+                display_h: int | None = None) -> dict:
+    """Merge work_layout.json over LAYOUT_DEFAULTS; cache by file mtime.
+
+    If display_w/display_h are provided and differ from the canvas size in the
+    layout file, every numeric position/size value is scaled proportionally so
+    the layout fits the actual framebuffer without overflowing.
+    """
     import json
     try:
         mtime = os.path.getmtime(_LAYOUT_FILE)
@@ -119,10 +126,58 @@ def load_layout(font_path: str | None = None) -> dict:
             _layout_cache["data"]  = copy.deepcopy(LAYOUT_DEFAULTS)
             _layout_cache["mtime"] = mtime
 
-    layout = _layout_cache["data"]
+    layout = copy.deepcopy(_layout_cache["data"])
+
+    if display_w and display_h:
+        cw = layout["canvas"]["width"]
+        ch = layout["canvas"]["height"]
+        if cw != display_w or ch != display_h:
+            sx = display_w / cw
+            sy = display_h / ch
+            sf = (sx * sy) ** 0.5  # geometric mean for font sizes
+            layout = _scale_layout(layout, sx, sy, sf, display_w, display_h)
+
     if font_path:
-        layout = copy.deepcopy(layout)
         layout["font"]["path"] = font_path
+    return layout
+
+
+def _scale_layout(layout: dict, sx: float, sy: float, sf: float,
+                  w: int, h: int) -> dict:
+    """Return a copy of layout with all positions/sizes scaled."""
+    layout["canvas"]["width"]  = w
+    layout["canvas"]["height"] = h
+
+    def sx_(v): return round(v * sx) if v is not None else None
+    def sy_(v): return round(v * sy) if v is not None else None
+    def sf_(v): return max(8, round(v * sf)) if v is not None else None
+
+    ic = layout.get("icon", {})
+    ic["radius"] = sf_(ic.get("radius"))
+    ic["gap"]    = sx_(ic.get("gap"))
+    ic["x"]      = sx_(ic.get("x"))
+    ic["y"]      = sy_(ic.get("y"))
+
+    aq = layout.get("aqi", {})
+    aq["cx"]         = sx_(aq.get("cx"))
+    aq["y"]          = sy_(aq.get("y"))
+    aq["label_size"] = sf_(aq.get("label_size"))
+    aq["value_size"] = sf_(aq.get("value_size"))
+
+    gr = layout.get("grid", {})
+    gr["height"]    = sy_(gr.get("height"))
+    gr["label_size"] = sf_(gr.get("label_size"))
+    gr["temp_size"]  = sf_(gr.get("temp_size"))
+    gr["rain_size"]  = sf_(gr.get("rain_size"))
+    gr["hum_size"]   = sf_(gr.get("hum_size"))
+    gr["wind_size"]  = sf_(gr.get("wind_size"))
+
+    for page_lines in layout.get("line_positions", {}).values():
+        for line in page_lines:
+            line["x"] = sx_(line.get("x"))
+            line["y"] = sy_(line.get("y"))
+            line["h"] = sf_(line.get("h"))
+
     return layout
 
 
