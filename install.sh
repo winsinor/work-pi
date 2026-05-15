@@ -3,7 +3,7 @@
 # Run as root:  sudo bash install.sh
 set -euo pipefail
 
-INSTALL_DIR="/home/pi/work-dashboard"
+INSTALL_DIR="/home/pi/work-pi"
 SERVICE_NAME="work-dashboard"
 SERVICE_FILE="work-dashboard.service"
 PYTHON="python3"
@@ -111,19 +111,13 @@ if [[ "$TOTAL_KB" -gt 524288 ]]; then
         || info "    cairosvg install failed — weather icons will render without SVG"
 fi
 
-# ── copy files ─────────────────────────────────────────────────────────────────
+# ── verify install dir ─────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-info "==> Installing to $INSTALL_DIR …"
-mkdir -p "$INSTALL_DIR"
-
-rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
-    "$SCRIPT_DIR/" "$INSTALL_DIR/" \
-    2>/dev/null || {
-    cp -r "$SCRIPT_DIR"/. "$INSTALL_DIR/"
-    rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/__pycache__"
-    [[ -f "$SCRIPT_DIR/config.json" ]] || rm -f "$INSTALL_DIR/config.json"
-}
+# Run directly from the repo — no copy needed
+if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
+    die "Run install.sh from $INSTALL_DIR (clone the repo there first)"
+fi
 
 chmod +x "$INSTALL_DIR/work_display.py" 2>/dev/null || true
 

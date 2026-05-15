@@ -6,8 +6,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/home/pi/work-dashboard
-ExecStart=/usr/bin/python3 /home/pi/work-dashboard/work_display.py
+WorkingDirectory=/home/pi/work-pi
+ExecStart=/usr/bin/python3 /home/pi/work-pi/work_display.py
 Restart=always
 RestartSec=10
 # Root is required so nmcli can manage WiFi from the setup web UI.
