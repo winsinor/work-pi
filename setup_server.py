@@ -1,13 +1,17 @@
 """Embedded HTTP server for web-based configuration and WiFi management."""
 from __future__ import annotations
 
+import copy
 import email.parser
 import io
 import json
+import mimetypes
 import os
 import socket
 import subprocess
+import tempfile
 import threading
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import config as cfg_module
@@ -16,6 +20,9 @@ _BASE = os.path.dirname(os.path.abspath(__file__))
 _SETUP_HTML = os.path.join(_BASE, "setup", "index.html")
 _CUSTOM_IMAGES_DIR = os.path.join(_BASE, "custom_images")
 _ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
+_EDITOR_DIR  = os.path.join(_BASE, "editor")
+_ICONS_DIR   = os.path.join(_BASE, "icons")
+_LAYOUT_FILE = os.path.join(_BASE, "work_layout.json")
 
 # Event signalled when user saves a valid config via the web UI
 config_saved = threading.Event()
@@ -95,6 +102,122 @@ def _wifi_status() -> dict:
         return {"status": "unknown", "message": str(exc)}
 
 
+# ── Demo pages for editor preview ──────────────────────────────────────────────────
+
+_DEMO_PAGES: dict = {
+    "forecast": {
+        "_name": "forecast",
+        "title": "Forecast",
+        "lines": [
+            {"text": "72°F",                 "size": 3, "color": "white"},
+            {"text": "Partly Cloudy",              "size": 1, "color": "white",    "left_align": True},
+            {"text": "Hi 78°  Lo 61°",  "size": 1, "color": "cyan",     "left_align": True},
+            {"text": "20% chance of rain",         "size": 1, "color": "white",    "left_align": True},
+            {"text": "Hum: 65%",                   "size": 0, "color": "cyan",     "left_align": True},
+            {"text": "8mph W",                     "size": 0, "color": "white",    "left_align": True},
+            {"text": "becoming sunny later",       "size": 0, "color": "darkgrey", "left_align": True},
+        ],
+        "hourly_grid": [
+            {"label": "1pm", "temp": "70°", "rain": "15%", "rain_color": "white"},
+            {"label": "3pm", "temp": "72°", "rain": "10%", "rain_color": "white"},
+            {"label": "5pm", "temp": "71°", "rain": "5%",  "rain_color": "darkgrey"},
+            {"label": "7pm", "temp": "68°", "rain": "0%",  "rain_color": "darkgrey"},
+            {"label": "9pm", "temp": "65°", "rain": "0%",  "rain_color": "darkgrey"},
+        ],
+        "weather_icon": "partly_cloudy",
+        "aqi_overlay": {"value": 42, "color": "green"},
+    },
+    "calendar": {
+        "_name": "calendar",
+        "title": "Calendar",
+        "lines": [
+            {"text": "Design Review",          "color": "white", "wrap": True},
+            {"text": "in 15 min",              "size": 3, "color": "red"},
+            {"text": "2:00 - 3:00 PM",         "size": 1, "color": "grey"},
+            {"text": "Then: 1:1 with Manager", "color": "grey"},
+        ],
+    },
+    "calendar_empty": {
+        "_name": "calendar_empty",
+        "title": "Calendar",
+        "lines": [
+            {"text": "No upcoming",  "size": 1, "color": "darkgrey"},
+            {"text": "events today", "size": 1, "color": "darkgrey"},
+        ],
+    },
+    "commute": {
+        "_name": "commute",
+        "title": "Commute Home",
+        "lines": [
+            {"text": "Work → Home",              "size": 1, "color": "white"},
+            {"text": "24 min",                        "size": 2, "color": "green"},
+            {"text": "Via I-95",                      "size": 0, "color": "darkgrey"},
+            {"text": "Work → Waypoint → Home", "size": 1, "color": "white"},
+            {"text": "31 min",                        "size": 2, "color": "yellow"},
+            {"text": "+8 min (traffic)",              "size": 0, "color": "yellow"},
+        ],
+    },
+    "wfh": {
+        "_name": "wfh",
+        "title": "Working From Home",
+        "lines": [{"text": "Working From Home", "size": 3, "color": "white"}],
+    },
+    "ooo": {
+        "_name": "ooo",
+        "title": "Out of Office",
+        "lines": [
+            {"text": "Out of Office",        "size": 3, "color": "white"},
+            {"text": "Returning Mon Jan 20", "size": 1, "color": "cyan"},
+        ],
+    },
+    "holiday": {
+        "_name": "holiday",
+        "title": "Holiday",
+        "lines": [{"text": "Martin Luther King Day", "size": 3, "color": "white"}],
+    },
+}
+
+
+def _render_preview(page_name: str, posted_layout: dict,
+                    icon: str | None, scale: int) -> bytes:
+    """Build a demo page dict, render with PIL, return PNG bytes."""
+    from render import render_page_pil, LAYOUT_DEFAULTS
+    from PIL import Image
+
+    layout = copy.deepcopy(LAYOUT_DEFAULTS)
+    for k, v in posted_layout.items():
+        if isinstance(v, dict) and k in layout and isinstance(layout[k], dict):
+            layout[k].update(v)
+        else:
+            layout[k] = v
+
+    try:
+        cfg = cfg_module.load()
+        layout["font"]["path"] = cfg_module.resolve_font_path(cfg)
+    except Exception:
+        pass
+
+    if page_name == "clock":
+        from pages import build_clock_page
+        page = build_clock_page()
+    elif page_name in _DEMO_PAGES:
+        page = copy.deepcopy(_DEMO_PAGES[page_name])
+    else:
+        page = {"_name": page_name, "title": page_name.title(), "lines": []}
+
+    if icon:
+        page["weather_icon"] = icon
+
+    img = render_page_pil(page, layout)
+    if scale > 1:
+        img = img.resize((img.width * scale, img.height * scale),
+                         Image.Resampling.NEAREST)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 # ── HTTP handler ────────────────────────────────────────────────────────────────────
 
 class SetupHandler(BaseHTTPRequestHandler):
@@ -122,6 +245,22 @@ class SetupHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except FileNotFoundError:
             self.send_error(404, "Setup UI not found")
+
+    def _send_file(self, abs_path: str):
+        if not os.path.normpath(abs_path).startswith(os.path.normpath(_BASE)):
+            self.send_response(403); self.end_headers(); return
+        if not os.path.isfile(abs_path):
+            self.send_error(404); return
+        mime, _ = mimetypes.guess_type(abs_path)
+        mime = mime or "application/octet-stream"
+        with open(abs_path, "rb") as f:
+            data = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", 0))
@@ -153,6 +292,35 @@ class SetupHandler(BaseHTTPRequestHandler):
                     if ext in _ALLOWED_IMAGE_EXTS:
                         filenames.append(fname)
             self._send_json({"images": filenames})
+
+        elif path in ("/editor/work", "/editor/work/"):
+            self._send_file(os.path.join(_EDITOR_DIR, "work", "index.html"))
+
+        elif path.startswith("/work/editor/"):
+            rel = path[len("/work/editor/"):]
+            self._send_file(os.path.join(_EDITOR_DIR, "work", rel))
+
+        elif path.startswith("/editor/"):
+            rel = path[len("/editor/"):]
+            self._send_file(os.path.join(_EDITOR_DIR, rel))
+
+        elif path.startswith("/icons/"):
+            rel = path[len("/icons/"):]
+            self._send_file(os.path.join(_ICONS_DIR, rel))
+
+        elif path == "/work/layout":
+            try:
+                with open(_LAYOUT_FILE) as f:
+                    raw = f.read()
+                body_bytes = raw.encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body_bytes)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(body_bytes)
+            except FileNotFoundError:
+                self._send_json({})
 
         else:
             self.send_error(404)
@@ -235,6 +403,58 @@ class SetupHandler(BaseHTTPRequestHandler):
             with open(dest, "wb") as f:
                 f.write(file_data)
             self._send_json({"status": "saved", "filename": file_name})
+
+        elif path == "/work/layout/save":
+            try:
+                data = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                self._send_json({"error": "Invalid JSON"}, 400)
+                return
+            dir_ = os.path.dirname(os.path.abspath(_LAYOUT_FILE))
+            os.makedirs(dir_, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp, _LAYOUT_FILE)
+            except Exception as exc:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                self._send_json({"error": str(exc)}, 500)
+                return
+            try:
+                from render import invalidate_layout_cache
+                invalidate_layout_cache()
+            except Exception:
+                pass
+            self._send_json({"ok": True})
+
+        elif path.startswith("/work/preview/"):
+            page_name = path[len("/work/preview/"):]
+            qs = urllib.parse.parse_qs(
+                self.path.split("?", 1)[1] if "?" in self.path else ""
+            )
+            scale = int(qs.get("scale", ["1"])[0])
+            icon_list = qs.get("icon", [])
+            icon = icon_list[0] if icon_list else None
+            try:
+                posted_layout = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                posted_layout = {}
+            try:
+                png = _render_preview(page_name, posted_layout, icon, scale)
+            except Exception as exc:
+                print(f"[preview] {page_name}: {exc}")
+                self._send_json({"error": str(exc)}, 500)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(png)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(png)
 
         else:
             self.send_error(404)

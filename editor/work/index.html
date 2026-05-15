@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Work Display Editor</title>
+  <link rel="stylesheet" href="/editor/style.css">
+  <link rel="stylesheet" href="/work/editor/style.css">
+</head>
+<body>
+
+<div id="header">
+  <a href="/" style="color:var(--text-dim);text-decoration:none;font-size:12px">← Setup</a>
+  <h1>Work Display Editor</h1>
+  <button id="btn-demo" class="btn btn-sm" title="Toggle demo/live data">Demo</button>
+  <button id="btn-play" class="btn btn-sm" title="Auto-cycle pages">▶ Play</button>
+  <button id="btn-export" class="btn btn-sm" title="Download work_layout.json">Export</button>
+  <button id="btn-reset" class="btn btn-sm btn-danger" title="Reset layout to defaults">Reset</button>
+  <button id="btn-save" class="btn btn-primary" disabled>Save</button>
+</div>
+
+<div id="body">
+
+  <!-- Left: page list -->
+  <div id="sidebar">
+    <div class="sidebar-label">Pages</div>
+    <div id="page-list"></div>
+    <div class="sidebar-label" style="margin-top:12px">Global</div>
+    <div id="tab-global" class="page-tab" onclick="selectGlobal()">⚙ Layout Settings</div>
+  </div>
+
+  <!-- Center: preview -->
+  <div id="canvas-area">
+    <div id="preview-wrap">
+      <img id="preview-img" src="" alt="preview" width="640" height="480">
+      <div id="preview-overlay" class="hidden">
+        <div id="preview-overlay-inner">
+          <span>Rendering…</span>
+          <div id="pbar-track"><div id="pbar-fill"></div></div>
+        </div>
+      </div>
+    </div>
+    <div id="preview-controls">
+      <button class="btn btn-sm" onclick="prevPage()">◀</button>
+      <span id="page-indicator">–</span>
+      <button class="btn btn-sm" onclick="nextPage()">▶</button>
+    </div>
+  </div>
+
+  <!-- Right: properties -->
+  <div id="props-panel">
+
+    <!-- D-pad nudge widget -->
+    <div id="dpad">
+      <div id="dpad-label">tap an element to position it</div>
+      <div id="dpad-coords">
+        <div>X <span id="dpad-xval">—</span></div>
+        <div>Y <span id="dpad-yval">—</span></div>
+      </div>
+      <div class="dpad-grid">
+        <div></div>
+        <button class="dpad-btn" data-dir="up">▲</button>
+        <div></div>
+        <button class="dpad-btn" data-dir="left">◀</button>
+        <button id="dpad-step" class="dpad-center">1px</button>
+        <button class="dpad-btn" data-dir="right">▶</button>
+        <div></div>
+        <button class="dpad-btn" data-dir="down">▼</button>
+        <div></div>
+      </div>
+    </div>
+
+    <div id="props-content"></div>
+  </div>
+
+</div>
+
+<!-- Icon picker row for forecast page -->
+<template id="tmpl-icon-row">
+  <div class="prop-section">
+    <div class="prop-label">Weather Icon (preview only)</div>
+    <div id="icon-row" class="icon-row"></div>
+  </div>
+</template>
+
+<script src="/editor/icons.js"></script>
+<script src="/work/editor/app.js"></script>
+</body>
+</html>
