@@ -39,12 +39,15 @@ apt-get install -y --no-install-recommends \
     python3-pil \
     libatlas-base-dev \
     libopenjp2-7 \
-    libtiff6 \
     fonts-freefont-ttf \
     fonts-dejavu-core \
     network-manager \
-    nmcli \
     git
+
+# libtiff: Bullseye ships libtiff5, Bookworm ships libtiff6
+apt-get install -y --no-install-recommends libtiff6 2>/dev/null \
+    || apt-get install -y --no-install-recommends libtiff5 2>/dev/null \
+    || info "    libtiff not found — Pillow may still work via its own bundled libs"
 
 # cairosvg system dep (for weather icons — optional; degrades gracefully without)
 apt-get install -y --no-install-recommends \

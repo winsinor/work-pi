@@ -896,19 +896,20 @@ Or simply disable buttons in the setup UI if you don't need them.
 
 ### Python version errors
 
-The app requires **Python 3.10+** for the `X | Y` union type hint syntax.
+The app requires **Python 3.9+**.
 
 Check your version:
 ```bash
 python3 --version
 ```
 
-Pi OS **Bullseye** (2021+) ships Python 3.9. Upgrade to **Bookworm** (Pi OS 2023+)
-which ships Python 3.11, or install Python 3.10 manually:
-```bash
-sudo apt install python3.11
-# then use python3.11 instead of python3 in all commands above
-```
+Pi OS **Bullseye** ships Python 3.9 — this is fine. Pi OS **Bookworm** ships
+Python 3.11 — also fine. If you are on an older image (Buster or earlier) that
+ships Python 3.7 or 3.8, reflash with Bullseye or Bookworm.
+
+> **Note**: the source code uses `X | Y` union type hint syntax, but all files
+> include `from __future__ import annotations` which makes that syntax valid on
+> Python 3.7+. No upgrade is needed just for type hints.
 
 ### Service crashes on startup
 
