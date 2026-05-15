@@ -42,6 +42,7 @@ apt-get install -y --no-install-recommends \
     fonts-freefont-ttf \
     fonts-dejavu-core \
     network-manager \
+    librsvg2-bin \
     git
 
 # libtiff: Bullseye ships libtiff5, Bookworm ships libtiff6
@@ -125,6 +126,20 @@ rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
 }
 
 chmod +x "$INSTALL_DIR/work_display.py" 2>/dev/null || true
+
+# ── pre-convert SVG icons to PNG ───────────────────────────────────────────────
+info "==> Converting weather icons to PNG …"
+if command -v rsvg-convert &>/dev/null; then
+    for svg in "$INSTALL_DIR/icons/"*.svg; do
+        png="${svg%.svg}.png"
+        [[ -f "$png" ]] && continue
+        rsvg-convert -w 200 -h 200 "$svg" -o "$png" 2>/dev/null \
+            && info "    $(basename $png)" \
+            || info "    skipped $(basename $svg)"
+    done
+else
+    info "    rsvg-convert not found — install librsvg2-bin to enable SVG icons"
+fi
 
 # ── systemd service ────────────────────────────────────────────────────────────
 info "==> Installing systemd service …"

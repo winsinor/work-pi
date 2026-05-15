@@ -6,6 +6,7 @@ RGB565 frames to the framebuffer. On first run (no config), shows a
 setup URL and starts the web config server.
 """
 
+import glob
 import os
 import subprocess
 import sys
@@ -225,10 +226,18 @@ def main():
         layout = load_layout(font_path, display_w=W, display_h=H)
 
         display = get_display(store)
-        pages   = display.get("pages") if display else None
+        pages   = list(display.get("pages") or []) if display else None
         if not pages:
             time.sleep(1)
             continue
+
+        # Inject custom image pages from custom_images/ directory
+        _custom_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_images")
+        if os.path.isdir(_custom_dir):
+            _img_exts = (".png", ".jpg", ".jpeg", ".bmp")
+            for _img_file in sorted(glob.glob(os.path.join(_custom_dir, "*"))):
+                if os.path.splitext(_img_file)[1].lower() in _img_exts:
+                    pages.append({"_name": "custom_image", "image_path": _img_file})
 
         page  = pages[idx % len(pages)]
         dwell = (layout.get("pages", {})

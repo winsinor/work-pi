@@ -7,7 +7,7 @@ import math
 import os
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
     _PIL_AVAILABLE = True
 except ImportError:
     _PIL_AVAILABLE = False
@@ -47,6 +47,7 @@ LAYOUT_DEFAULTS: dict = {
         "holiday":        {"enabled": True, "dwell_seconds": 10},
         "setup":          {"enabled": True, "dwell_seconds": 10},
         "loading":        {"enabled": True, "dwell_seconds": 3},
+        "custom_image":   {"enabled": True, "dwell_seconds": 10},
     },
     "line_positions": {
         "clock": [
@@ -249,7 +250,7 @@ _static_icon_cache: dict = {}
 
 
 def _load_static_icon(name: str, r: int):
-    if not _CAIROSVG_AVAILABLE or not _PIL_AVAILABLE:
+    if not _PIL_AVAILABLE:
         return None
     filename = _STATIC_ICON_MAP.get(name)
     if not filename:
@@ -257,6 +258,22 @@ def _load_static_icon(name: str, r: int):
     cache_key = (name, r)
     if cache_key in _static_icon_cache:
         return _static_icon_cache[cache_key]
+
+    # 1. Try pre-converted PNG first (e.g. icons/clear-day.png)
+    png_filename = filename.rsplit(".", 1)[0] + ".png"
+    png_path = os.path.join(_ICONS_DIR, png_filename)
+    if os.path.exists(png_path):
+        try:
+            img = Image.open(png_path).convert("RGBA").resize((r * 2, r * 2), Image.LANCZOS)
+            _static_icon_cache[cache_key] = img
+            return img
+        except Exception as exc:
+            print(f"[icon] {png_filename}: {exc}")
+
+    # 2. Fall back to cairosvg (SVG → PNG in memory)
+    if not _CAIROSVG_AVAILABLE:
+        _static_icon_cache[cache_key] = None
+        return None
     svg_path = os.path.join(_ICONS_DIR, filename)
     if not os.path.exists(svg_path):
         _static_icon_cache[cache_key] = None
@@ -421,11 +438,31 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
         draw.text((cx - rw // 2, y_rain), rn,  font=rn_f,  fill=rc)
 
 
+# ── Custom image page ────────────────────────────────────────────────────────────────
+
+def render_custom_image_page(image_path: str, layout: dict) -> "Image.Image":
+    """Open image_path, resize/crop to canvas size using ImageOps.fit, return PIL image."""
+    W = layout["canvas"]["width"]
+    H = layout["canvas"]["height"]
+    img = Image.open(image_path).convert("RGB")
+    img = ImageOps.fit(img, (W, H), Image.LANCZOS)
+    return img
+
+
 # ── Main renderer ────────────────────────────────────────────────────────────────────
 
 def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     if layout is None:
         layout = load_layout()
+
+    # Custom image page — bypass normal text renderer
+    if page.get("_name") == "custom_image" and page.get("image_path"):
+        try:
+            return render_custom_image_page(page["image_path"], layout)
+        except Exception as exc:
+            print(f"[render] custom_image {page['image_path']}: {exc}")
+            # Fall through to blank black frame on error
+
     W  = layout["canvas"]["width"]
     H  = layout["canvas"]["height"]
     hh = layout["header"]["height"]

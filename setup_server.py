@@ -1,6 +1,8 @@
 """Embedded HTTP server for web-based configuration and WiFi management."""
 from __future__ import annotations
 
+import email.parser
+import io
 import json
 import os
 import socket
@@ -12,6 +14,8 @@ import config as cfg_module
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _SETUP_HTML = os.path.join(_BASE, "setup", "index.html")
+_CUSTOM_IMAGES_DIR = os.path.join(_BASE, "custom_images")
+_ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
 
 # Event signalled when user saves a valid config via the web UI
 config_saved = threading.Event()
@@ -141,6 +145,15 @@ class SetupHandler(BaseHTTPRequestHandler):
         elif path == "/api/local_ip":
             self._send_json({"ip": _get_local_ip()})
 
+        elif path == "/api/custom-images":
+            filenames = []
+            if os.path.isdir(_CUSTOM_IMAGES_DIR):
+                for fname in sorted(os.listdir(_CUSTOM_IMAGES_DIR)):
+                    ext = os.path.splitext(fname)[1].lower()
+                    if ext in _ALLOWED_IMAGE_EXTS:
+                        filenames.append(fname)
+            self._send_json({"images": filenames})
+
         else:
             self.send_error(404)
 
@@ -189,6 +202,39 @@ class SetupHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
             self._send_json(result)
+
+        elif path == "/api/upload-image":
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type:
+                self._send_json({"error": "multipart/form-data required"}, 400)
+                return
+            # Parse multipart body using email stdlib
+            # Reconstruct a full MIME message so email.parser can handle it
+            msg_bytes = (
+                f"Content-Type: {content_type}\r\n\r\n".encode() + body
+            )
+            msg = email.parser.BytesParser().parsebytes(msg_bytes)
+            file_data = None
+            file_name = None
+            for part in msg.walk():
+                cd = part.get("Content-Disposition", "")
+                if 'name="image"' in cd or "name=image" in cd:
+                    raw_fn = part.get_filename() or ""
+                    file_name = os.path.basename(raw_fn)
+                    file_data = part.get_payload(decode=True)
+                    break
+            if not file_data or not file_name:
+                self._send_json({"error": "No image file in request"}, 400)
+                return
+            ext = os.path.splitext(file_name)[1].lower()
+            if ext not in _ALLOWED_IMAGE_EXTS:
+                self._send_json({"error": f"Unsupported file type: {ext}"}, 400)
+                return
+            os.makedirs(_CUSTOM_IMAGES_DIR, exist_ok=True)
+            dest = os.path.join(_CUSTOM_IMAGES_DIR, file_name)
+            with open(dest, "wb") as f:
+                f.write(file_data)
+            self._send_json({"status": "saved", "filename": file_name})
 
         else:
             self.send_error(404)
