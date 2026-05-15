@@ -222,7 +222,7 @@ def main():
 
     idx = 0
     while True:
-        layout = load_layout(font_path)
+        layout = load_layout(font_path, display_w=W, display_h=H)
 
         display = get_display(store)
         pages   = display.get("pages") if display else None
