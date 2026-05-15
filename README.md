@@ -36,6 +36,18 @@ First-time setup is done through a web UI served by the Pi itself.
 11. [GPIO buttons](#gpio-buttons)
 12. [Getting your API key and calendar URL](#getting-your-api-key-and-calendar-url)
 13. [Troubleshooting](#troubleshooting)
+    - [Display stays black](#display-stays-black)
+    - [Image is upside down](#image-is-upside-down)
+    - [Setup UI not reachable](#setup-ui-not-reachable)
+    - [WiFi scan shows no networks](#wifi-scan-shows-no-networks--connect-fails)
+    - [Boot hangs at NetworkManager Wait Online](#boot-hangs-at-a-start-job-is-running-for-networkmanager-wait-online)
+    - [WiFi stops working after install](#wifi-stops-working-after-install-networkmanager-vs-wpa_supplicant-conflict)
+    - [pip install fails / packages not installed](#pip-install-fails--packages-not-installed-at-runtime)
+    - [Display content appears doubled](#display-content-appears-doubled--stretched-frame-too-large-for-framebuffer)
+    - [Flashing cursor on SPI display](#flashing-cursor--underscore-visible-on-the-spi-display)
+    - [System clock is wrong](#system-clock-is-wrong)
+    - [Weather icons show fallback](#weather-icons-show-a-genericbuilt-in-fallback-instead-of-the-svg-icons)
+    - [OSError: Address already in use](#setup-oserror-errno-98-address-already-in-use)
 14. [Data sources](#data-sources)
 
 ---
@@ -310,7 +322,22 @@ sudo systemctl start NetworkManager
 > see [WiFi without NetworkManager](#wifi-without-networkmanager) in the
 > troubleshooting section.
 
-### 3b. Clone the repository
+### 3b. Protect your SSH session before installing
+
+The install script takes 5–15 minutes on a Pi 1 B+. If your SSH connection
+drops mid-install, the script is killed and packages may be half-installed.
+Run it inside a persistent terminal session:
+
+```bash
+sudo apt install -y screen
+screen -S install
+# Run the installer below. If SSH drops: ssh back in, then: screen -r install
+```
+
+To detach from screen without killing it: press **Ctrl+A**, then **D**.
+To reattach: `screen -r install`
+
+### 3c. Clone the repository
 
 ```bash
 cd /home/pi
@@ -318,7 +345,7 @@ git clone https://github.com/winsinor/work-pi.git
 cd work-pi
 ```
 
-### 3c. Install Python dependencies
+### 3d. Install Python dependencies
 
 **Pi 3, 4, 5, Zero 2 W (full install):**
 ```bash
@@ -337,7 +364,7 @@ sudo apt install python3-pip
 pip3 install --break-system-packages -r requirements.txt
 ```
 
-### 3d. Verify the install
+### 3e. Verify the install
 
 ```bash
 python3 -c "from PIL import Image; print('Pillow OK')"
@@ -929,6 +956,239 @@ To speed things up:
 2. Reduce the hourly grid columns in `work_layout.json`: `"grid": {"columns": 3}`
 3. Disable the AQI overlay: remove the `aqi_overlay` key handler won't be called
    (no code change needed — just keep AQI update interval high so it stays `null`).
+
+---
+
+### Boot hangs at "A start job is running for NetworkManager Wait Online"
+
+**Symptom**: Pi appears to boot normally, then hangs for 90–120 seconds at a
+message containing `NetworkManager-wait-online.service`. SSH may be unreachable
+during this time.
+
+**Cause**: NetworkManager's `wait-online` service waits indefinitely for a
+managed interface to get a DHCP address. On a fresh install where WiFi is still
+managed by `wpa_supplicant`, NetworkManager sees no active connection and
+blocks boot.
+
+**Fix** (the installer does this automatically, but if you installed manually):
+```bash
+sudo systemctl disable NetworkManager-wait-online.service
+sudo reboot
+```
+
+This disables the blocking wait without affecting NetworkManager itself.
+
+---
+
+### WiFi stops working after install (NetworkManager vs wpa_supplicant conflict)
+
+**Symptom**: After `install.sh` runs and the Pi reboots, WiFi is gone. `ip link show wlan0`
+shows the interface as DOWN or has no IP address. The Pi is unreachable via SSH.
+
+**Cause**: `install.sh` installs and starts `network-manager`. NetworkManager
+tries to take control of `wlan0`, conflicting with `wpa_supplicant` and `dhcpcd`
+which were already managing it. NetworkManager wins, but has no credentials for
+your WiFi, so the connection drops.
+
+**The installer now prevents this**: it writes
+`/etc/NetworkManager/conf.d/99-unmanaged-wifi.conf` marking `wlan0` as
+unmanaged when `wpa_supplicant` is active. This preserves your existing WiFi
+connection. The setup UI's WiFi tab can then hand off to NetworkManager later.
+
+**If you're already stuck without WiFi** (Pi accessible via keyboard and monitor,
+or Ethernet):
+
+```bash
+# Tell NM to leave wlan0 alone
+sudo mkdir -p /etc/NetworkManager/conf.d
+sudo tee /etc/NetworkManager/conf.d/99-unmanaged-wifi.conf <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:wlan0
+EOF
+
+sudo systemctl restart NetworkManager
+sudo systemctl restart wpa_supplicant
+sudo systemctl restart dhcpcd
+```
+
+WiFi should reconnect within 10–15 seconds.
+
+---
+
+### pip install fails / packages not installed at runtime
+
+**Symptom**: `install.sh` runs but some packages aren't installed. The service
+crashes with `ModuleNotFoundError: No module named 'icalendar'` (or similar).
+Or `install.sh` appeared to complete but scrolled past errors silently.
+
+**Cause 1 — DNS not ready**: NetworkManager may still be starting when `pip`
+runs. `pip` can't reach PyPI and fails silently when using `|| true`.
+
+**Cause 2 — SSH dropped during install**: If the SSH session was killed mid-install,
+packages after the disconnect point were never installed.
+
+**The installer now handles this**: it pings `pypi.org` up to 5 times before
+running `pip`, and reports each failed package individually rather than
+suppressing all errors.
+
+**To reinstall missing packages manually**:
+```bash
+pip3 install requests icalendar "recurring-ical-events>=2.0" gpiozero RPi.GPIO
+```
+
+**To check what's installed**:
+```bash
+pip3 list | grep -E "requests|icalendar|recurring|gpiozero|RPi"
+```
+
+---
+
+### Display content appears doubled / stretched (frame too large for framebuffer)
+
+**Symptom**: The display shows only the top-left portion of the page, with
+content appearing twice side by side, or the image is compressed and garbled.
+
+**Cause**: `work_layout.json` has a canvas size (default 480×320) larger than
+the display's framebuffer (e.g. 320×240). The rendered frame is 307,200 bytes
+but the framebuffer only accepts 153,600 bytes. The kernel wraps the extra pixels,
+causing the doubled appearance.
+
+**Fix**: The app now auto-scales the layout to match the display. Set your
+display's resolution correctly in the **Display** tab of the setup UI:
+
+- Width: your display width (e.g. `320`)
+- Height: your display height (e.g. `240`)
+
+Save and restart. If it still looks wrong, confirm the values in `config.json`:
+```bash
+cat /home/pi/work-dashboard/config.json | grep -A4 '"display"'
+```
+
+---
+
+### Flashing cursor / underscore visible on the SPI display
+
+**Symptom**: A blinking text cursor (usually an underscore or block) appears
+in the middle of the screen and flashes continuously, even when the dashboard
+is running.
+
+**Cause**: Linux's framebuffer console (`fbcon`) is mapped to the SPI display.
+The text cursor from the virtual terminal bleeds through the framebuffer writes.
+
+**Immediate fix** (takes effect without reboot):
+```bash
+echo 0 | sudo tee /sys/class/graphics/fbcon/cursor_blink
+```
+
+**Permanent fix** — add `fbcon=map:10` to `/boot/cmdline.txt` to redirect the
+console away from `fb1`:
+```bash
+sudo nano /boot/cmdline.txt
+```
+Append `fbcon=map:10` to the end of the existing single line (keep everything
+on one line):
+```
+... rootwait fbcon=map:10
+```
+Reboot for the change to take effect.
+
+Alternatively, remove the console entirely:
+- Remove `console=tty1` from `/boot/cmdline.txt`
+- `sudo systemctl disable getty@tty1`
+
+---
+
+### System clock is wrong
+
+**Symptom**: The displayed time is off by hours or stuck at a time from the past.
+The Pi 1 B+ has no real-time clock (RTC), so time is not preserved across reboots.
+
+**Cause**: On first boot, the Pi sets its clock from the last-known time (often
+a date far in the past) until NTP syncs. If NTP hasn't synced yet — or if the
+Pi has no internet access — the clock stays wrong.
+
+**Check NTP status**:
+```bash
+timedatectl status
+```
+
+Look for `System clock synchronized: yes`. If it shows `no`:
+```bash
+sudo systemctl restart systemd-timesyncd
+# Wait 30 seconds, then check again:
+timedatectl status
+```
+
+**If NTP sync succeeds but timezone is wrong**, set it in the setup UI
+(Location tab → Timezone), or from the command line:
+```bash
+sudo timedatectl set-timezone America/New_York
+```
+
+**Pi 1 B+ note**: Without an RTC, time is wrong on every cold boot until NTP
+syncs. The sync happens automatically once internet is available — usually
+within 60 seconds of network coming up. There's no fix beyond waiting for sync,
+or adding an RTC module (DS3231 is common and cheap).
+
+---
+
+### Weather icons show a generic/built-in fallback instead of the SVG icons
+
+**Symptom**: Weather icons look like simple geometric shapes or outlines
+rather than the expected SVG icon art.
+
+**Cause**: The `cairosvg` library (used to render SVG icons at runtime) requires
+native Cairo/GLib libraries that are unavailable or fail to build on ARMv6 (Pi 1
+B+, Zero W). The app falls back to its built-in vector icon renderer.
+
+**Fix**: `install.sh` pre-converts all SVG icons to PNG at install time using
+`rsvg-convert` from `librsvg2-bin`. PNG files are used automatically and look
+correct on all hardware.
+
+If you cloned and ran the app without going through `install.sh`, convert the
+icons manually:
+```bash
+sudo apt install -y librsvg2-bin
+for svg in /home/pi/work-dashboard/icons/*.svg; do
+    rsvg-convert -w 200 -h 200 "$svg" -o "${svg%.svg}.png"
+done
+sudo systemctl restart work-dashboard
+```
+
+---
+
+### `[setup] OSError: [Errno 98] Address already in use`
+
+**Symptom**: The service crashes immediately with this error in the journal.
+
+**Cause**: Two calls to `setup_server.start()` were binding to port 8080 in the
+same process — once at startup (unconditional) and once inside `_run_setup_mode`.
+This is now fixed; `start()` is idempotent and only binds once.
+
+**If you see this on an older version**: pull the latest code and restart:
+```bash
+cd /home/pi/work-pi && git pull
+cp setup_server.py /home/pi/work-dashboard/
+sudo systemctl restart work-dashboard
+```
+
+---
+
+### `systemctl status` or `journalctl` output opens a pager (stuck in `less`)
+
+**Symptom**: After running `systemctl status` or `journalctl`, the terminal
+seems frozen or only scrolls with arrow keys. `q` doesn't work as expected.
+
+**Cause**: These commands pipe their output to `less` (a pager) by default.
+Press **q** to quit — but only if the cursor is in the pager, not in an input
+field. If `q` types a `q` instead of quitting, you're at a shell prompt, not in
+the pager.
+
+**Avoid the pager entirely**:
+```bash
+sudo systemctl status --no-pager work-dashboard
+sudo journalctl -u work-dashboard -n 50 --no-pager
+```
 
 ---
 
