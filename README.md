@@ -314,14 +314,9 @@ sudo systemctl start NetworkManager
 
 ```bash
 cd /home/pi
-git clone https://github.com/winsinor/work-dashboard.git
-cd work-dashboard
+git clone https://github.com/winsinor/work-pi.git
+cd work-pi
 ```
-
-> If the repository isn't public yet, copy the files manually via `scp`:
-> ```bash
-> scp -r work-dashboard/ pi@work-display.local:/home/pi/
-> ```
 
 ### 3c. Install Python dependencies
 
