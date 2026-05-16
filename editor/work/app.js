@@ -370,9 +370,6 @@ function loadPreview() {
   if (!state.layout) return;
   const overlay = document.getElementById("preview-overlay");
   overlay.classList.remove("hidden");
-  const span = overlay.querySelector("span");
-  if (span) span.textContent = "Rendering…";
-  document.getElementById("pbar-fill").style.background = "var(--accent)";
   _startProgressBar();
 
   let page = state.currentPage === "global" ? "clock" : state.currentPage;
