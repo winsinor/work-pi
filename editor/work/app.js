@@ -342,32 +342,26 @@ function nextPage() {
   selectPage(PAGE_NAMES[(idx + 1) % PAGE_NAMES.length]);
 }
 
-// ── Progress bar ───────────────────────────────────────────────────────────
+// ── Rendering indicator ────────────────────────────────────────────────────
 
-let _progressAnim  = null;
-let _progressStart = 0;
+const _DOTS = ["Rendering", "Rendering.", "Rendering..", "Rendering…"];
+let _dotsTimer = null;
+let _dotsStep  = 0;
 
 function _startProgressBar() {
-  cancelAnimationFrame(_progressAnim);
-  _progressStart = Date.now();
-  const fill = document.getElementById("pbar-fill");
-  if (fill) fill.style.width = "0%";
-  _animPBar();
+  _dotsStep = 0;
+  _tickDots();
+  _dotsTimer = setInterval(_tickDots, 400);
 }
 
-function _animPBar() {
-  const fill = document.getElementById("pbar-fill");
-  if (!fill) return;
-  const elapsed = Date.now() - _progressStart;
-  // Asymptotic fill: approaches 90% over ~4 s, snaps to 100% on completion
-  fill.style.width = Math.min(90, (elapsed / 4000) * 90) + "%";
-  _progressAnim = requestAnimationFrame(_animPBar);
+function _tickDots() {
+  const span = document.querySelector("#preview-overlay span");
+  if (span) span.textContent = _DOTS[_dotsStep % _DOTS.length];
+  _dotsStep++;
 }
 
 function _stopProgressBar() {
-  cancelAnimationFrame(_progressAnim);
-  const fill = document.getElementById("pbar-fill");
-  if (fill) fill.style.width = "100%";  // snap to complete
+  clearInterval(_dotsTimer);
 }
 
 // ── Preview ────────────────────────────────────────────────────────────────
@@ -409,7 +403,6 @@ function loadPreview() {
     _stopProgressBar();
     const span = overlay.querySelector("span");
     if (span) span.textContent = "Error: " + err.message;
-    document.getElementById("pbar-fill").style.background = "var(--danger)";
   });
 
   const indicator = document.getElementById("page-indicator");
