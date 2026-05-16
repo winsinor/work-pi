@@ -376,6 +376,9 @@ function loadPreview() {
   if (!state.layout) return;
   const overlay = document.getElementById("preview-overlay");
   overlay.classList.remove("hidden");
+  const span = overlay.querySelector("span");
+  if (span) span.textContent = "Rendering…";
+  document.getElementById("pbar-fill").style.background = "var(--accent)";
   _startProgressBar();
 
   let page = state.currentPage === "global" ? "clock" : state.currentPage;
@@ -390,7 +393,10 @@ function loadPreview() {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(state.layout),
   })
-  .then(r => r.blob())
+  .then(r => {
+    if (!r.ok) return r.text().then(t => { throw new Error(`${r.status}: ${t}`); });
+    return r.blob();
+  })
   .then(blob => {
     _stopProgressBar();
     const img = document.getElementById("preview-img");
@@ -399,9 +405,11 @@ function loadPreview() {
     if (old.startsWith("blob:")) URL.revokeObjectURL(old);
     overlay.classList.add("hidden");
   })
-  .catch(() => {
+  .catch(err => {
     _stopProgressBar();
-    overlay.classList.add("hidden");
+    const span = overlay.querySelector("span");
+    if (span) span.textContent = "Error: " + err.message;
+    document.getElementById("pbar-fill").style.background = "var(--danger)";
   });
 
   const indicator = document.getElementById("page-indicator");
