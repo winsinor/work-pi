@@ -421,6 +421,11 @@
   font-size: 12px;
 }
 
+#preview-dots {
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+}
 
 /* ── Mobile — iPhone 16 Pro (393px) ─────────────────────── */
 @media (max-width: 600px) {

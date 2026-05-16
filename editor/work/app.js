@@ -344,7 +344,7 @@ function nextPage() {
 
 // ── Rendering indicator ────────────────────────────────────────────────────
 
-const _DOTS = ["Rendering", "Rendering.", "Rendering..", "Rendering…"];
+const _DOTS = ["", ".", "..", "…"];
 let _dotsTimer = null;
 let _dotsStep  = 0;
 
@@ -355,7 +355,7 @@ function _startProgressBar() {
 }
 
 function _tickDots() {
-  const span = document.querySelector("#preview-overlay span");
+  const span = document.getElementById("preview-dots");
   if (span) span.textContent = _DOTS[_dotsStep % _DOTS.length];
   _dotsStep++;
 }
@@ -370,6 +370,8 @@ function loadPreview() {
   if (!state.layout) return;
   const overlay = document.getElementById("preview-overlay");
   overlay.classList.remove("hidden");
+  const status = document.getElementById("preview-status");
+  if (status) status.innerHTML = `Rendering<span id="preview-dots"></span>`;
   _startProgressBar();
 
   let page = state.currentPage === "global" ? "clock" : state.currentPage;
@@ -398,8 +400,8 @@ function loadPreview() {
   })
   .catch(err => {
     _stopProgressBar();
-    const span = overlay.querySelector("span");
-    if (span) span.textContent = "Error: " + err.message;
+    const status = document.getElementById("preview-status");
+    if (status) status.textContent = "Error: " + err.message;
   });
 
   const indicator = document.getElementById("page-indicator");
