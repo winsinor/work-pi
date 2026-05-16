@@ -210,8 +210,8 @@ def _render_preview(page_name: str, posted_layout: dict,
 
     img = render_page_pil(page, layout)
     if scale > 1:
-        img = img.resize((img.width * scale, img.height * scale),
-                         Image.Resampling.NEAREST)
+        resample = getattr(Image, "Resampling", Image).NEAREST
+        img = img.resize((img.width * scale, img.height * scale), resample)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
