@@ -481,7 +481,7 @@ function buildGlobalProps() {
   frag.appendChild(section("Content", [
     numRow("Left margin",  "content.left_margin",  L.content.left_margin,  0, 40),
     numRow("Right margin", "content.right_margin", L.content.right_margin, 0, 40),
-    numRow("Min line gap", "content.line_gap_min", L.content.line_gap_min, 0, 40),
+    // numRow("Min line gap", "content.line_gap_min", L.content.line_gap_min, 0, 40),
   ]));
 
   frag.appendChild(section("Font", [
