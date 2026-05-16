@@ -468,15 +468,15 @@ function buildGlobalProps() {
   const frag = document.createDocumentFragment();
   const L = state.layout;
 
-  frag.appendChild(section("Header (0 = hidden)", [
-    numRow("Height", "header.height", L.header.height, 0, 60),
-    colorRow("Background", "header.bg", L.header.bg),
-    colorNameRow("Title color", "header.title_color", L.header.title_color),
-  ]));
+  // frag.appendChild(section("Header (0 = hidden)", [
+  //   numRow("Height", "header.height", L.header.height, 0, 60),
+  //   colorRow("Background", "header.bg", L.header.bg),
+  //   colorNameRow("Title color", "header.title_color", L.header.title_color),
+  // ]));
 
-  frag.appendChild(section("Footer (0 = hidden)", [
-    numRow("Height", "footer.height", L.footer.height, 0, 60),
-  ]));
+  // frag.appendChild(section("Footer (0 = hidden)", [
+  //   numRow("Height", "footer.height", L.footer.height, 0, 60),
+  // ]));
 
   frag.appendChild(section("Content", [
     numRow("Left margin",  "content.left_margin",  L.content.left_margin,  0, 40),
