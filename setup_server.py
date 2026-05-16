@@ -309,18 +309,19 @@ class SetupHandler(BaseHTTPRequestHandler):
             self._send_file(os.path.join(_ICONS_DIR, rel))
 
         elif path == "/work/layout":
+            from render import LAYOUT_DEFAULTS
             try:
                 with open(_LAYOUT_FILE) as f:
-                    raw = f.read()
-                body_bytes = raw.encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(body_bytes)))
-                self.send_header("Cache-Control", "no-cache")
-                self.end_headers()
-                self.wfile.write(body_bytes)
-            except FileNotFoundError:
-                self._send_json({})
+                    saved = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                saved = {}
+            merged = copy.deepcopy(LAYOUT_DEFAULTS)
+            for k, v in saved.items():
+                if isinstance(v, dict) and k in merged and isinstance(merged[k], dict):
+                    merged[k].update(v)
+                else:
+                    merged[k] = v
+            self._send_json(merged)
 
         else:
             self.send_error(404)
