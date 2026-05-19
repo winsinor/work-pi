@@ -8,6 +8,8 @@ Type=simple
 User=root
 WorkingDirectory=/home/pi/work-dashboard
 ExecStart=/usr/bin/python3 /home/pi/work-dashboard/work_display.py
+# Uncomment if the screen is upside-down before you can reach the setup UI:
+#Environment=DISPLAY_ROTATION=180
 Restart=always
 RestartSec=10
 # Root is required so nmcli can manage WiFi from the setup web UI.

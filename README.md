@@ -847,7 +847,32 @@ This gives the display read-only access to your calendar events.
 
 ### Image is upside down
 
-Set **Rotation: 180°** in the Display tab of the setup UI.
+**After setup:** set **Rotation: 180°** in the Display tab of the setup UI.
+
+**During first-time setup** (the setup page itself is upside-down, so you can't
+read the URL): you need to tell the service about the rotation before a
+`config.json` exists. Two options:
+
+*Option A — env var in the service file (recommended):*
+```bash
+sudo systemctl edit work-dashboard
+```
+Add these lines, save, then restart:
+```ini
+[Service]
+Environment=DISPLAY_ROTATION=180
+```
+```bash
+sudo systemctl restart work-dashboard
+```
+
+*Option B — minimal config.json:*
+```bash
+echo '{"display":{"rotation":180}}' | sudo tee /home/pi/work-dashboard/config.json
+sudo systemctl restart work-dashboard
+```
+The app will show the setup page correctly and prompt you to complete the rest of
+the config through the browser.
 
 ### Image colours are wrong (blue/red swapped)
 
