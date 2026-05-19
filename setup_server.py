@@ -1,6 +1,8 @@
 """Embedded HTTP server for web-based configuration and WiFi management."""
 from __future__ import annotations
 
+import email.parser
+import io
 import json
 import os
 import socket
@@ -12,6 +14,8 @@ import config as cfg_module
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _SETUP_HTML = os.path.join(_BASE, "setup", "index.html")
+_CUSTOM_IMAGES_DIR = os.path.join(_BASE, "custom_images")
+_ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
 
 # Event signalled when user saves a valid config via the web UI
 config_saved = threading.Event()
@@ -32,6 +36,20 @@ def _get_local_ip() -> str:
 
 
 # ── WiFi helpers (nmcli) ──────────────────────────────────────────────────────────────
+
+_NM_UNMANAGED_CONF = "/etc/NetworkManager/conf.d/99-unmanaged-wifi.conf"
+
+
+def _remove_unmanaged_override():
+    """Delete the install-time NM unmanaged override so NM manages WiFi going forward."""
+    try:
+        if os.path.exists(_NM_UNMANAGED_CONF):
+            os.remove(_NM_UNMANAGED_CONF)
+            subprocess.run(["systemctl", "reload", "NetworkManager"],
+                           capture_output=True, timeout=10)
+    except Exception as exc:
+        print(f"[setup] could not remove unmanaged override: {exc}")
+
 
 def _wifi_scan() -> list[dict]:
     """Return available WiFi networks via nmcli."""
@@ -141,6 +159,15 @@ class SetupHandler(BaseHTTPRequestHandler):
         elif path == "/api/local_ip":
             self._send_json({"ip": _get_local_ip()})
 
+        elif path == "/api/custom-images":
+            filenames = []
+            if os.path.isdir(_CUSTOM_IMAGES_DIR):
+                for fname in sorted(os.listdir(_CUSTOM_IMAGES_DIR)):
+                    ext = os.path.splitext(fname)[1].lower()
+                    if ext in _ALLOWED_IMAGE_EXTS:
+                        filenames.append(fname)
+            self._send_json({"images": filenames})
+
         else:
             self.send_error(404)
 
@@ -188,7 +215,41 @@ class SetupHandler(BaseHTTPRequestHandler):
                     cfg_module.save(current)
                 except Exception:
                     pass
+                _remove_unmanaged_override()
             self._send_json(result)
+
+        elif path == "/api/upload-image":
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type:
+                self._send_json({"error": "multipart/form-data required"}, 400)
+                return
+            # Parse multipart body using email stdlib
+            # Reconstruct a full MIME message so email.parser can handle it
+            msg_bytes = (
+                f"Content-Type: {content_type}\r\n\r\n".encode() + body
+            )
+            msg = email.parser.BytesParser().parsebytes(msg_bytes)
+            file_data = None
+            file_name = None
+            for part in msg.walk():
+                cd = part.get("Content-Disposition", "")
+                if 'name="image"' in cd or "name=image" in cd:
+                    raw_fn = part.get_filename() or ""
+                    file_name = os.path.basename(raw_fn)
+                    file_data = part.get_payload(decode=True)
+                    break
+            if not file_data or not file_name:
+                self._send_json({"error": "No image file in request"}, 400)
+                return
+            ext = os.path.splitext(file_name)[1].lower()
+            if ext not in _ALLOWED_IMAGE_EXTS:
+                self._send_json({"error": f"Unsupported file type: {ext}"}, 400)
+                return
+            os.makedirs(_CUSTOM_IMAGES_DIR, exist_ok=True)
+            dest = os.path.join(_CUSTOM_IMAGES_DIR, file_name)
+            with open(dest, "wb") as f:
+                f.write(file_data)
+            self._send_json({"status": "saved", "filename": file_name})
 
         else:
             self.send_error(404)
@@ -209,6 +270,9 @@ _server: HTTPServer | None = None
 def start(port: int) -> str:
     """Start the setup HTTP server in a daemon thread. Returns the local IP."""
     global _server
+    if _server is not None:
+        return _get_local_ip()
+    HTTPServer.allow_reuse_address = True
     _server = HTTPServer(("0.0.0.0", port), SetupHandler)
 
     def _run():

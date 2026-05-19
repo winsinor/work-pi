@@ -110,6 +110,7 @@
     <div class="tab" data-tab="addresses">Addresses</div>
     <div class="tab" data-tab="keys">API Keys</div>
     <div class="tab" data-tab="calendar">Calendar</div>
+    <div class="tab" data-tab="custom-images">Custom Images</div>
     <div class="tab" data-tab="keywords">Keywords</div>
     <div class="tab" data-tab="display">Display</div>
     <div class="tab" data-tab="intervals">Intervals</div>
@@ -146,11 +147,11 @@
       <div class="row">
         <div class="field">
           <label>Latitude</label>
-          <input type="number" id="loc-lat" step="0.0001" placeholder="e.g. 39.1031">
+          <input type="number" id="loc-lat" step="0.0001" placeholder="e.g. 40.7128">
         </div>
         <div class="field">
           <label>Longitude</label>
-          <input type="number" id="loc-lon" step="0.0001" placeholder="e.g. -84.512">
+          <input type="number" id="loc-lon" step="0.0001" placeholder="e.g. -74.0060">
         </div>
       </div>
       <div class="field">
@@ -182,11 +183,11 @@
       <p class="hint" style="margin-bottom:14px">Full street addresses for TomTom routing. Geocoded once at startup.</p>
       <div class="field">
         <label>Home address <span style="color:var(--red)">*</span></label>
-        <input type="text" id="addr-home" placeholder="e.g. 123 Main St, Cincinnati, OH 45201">
+        <input type="text" id="addr-home" placeholder="e.g. 123 Main St, Anytown, ST 12345">
       </div>
       <div class="field">
         <label>Work address <span style="color:var(--red)">*</span></label>
-        <input type="text" id="addr-work" placeholder="e.g. 7095 Industrial Rd, Florence, KY 41042">
+        <input type="text" id="addr-work" placeholder="e.g. 456 Office Park Dr, Anytown, ST 12345">
       </div>
       <div class="field">
         <label>Waypoint address <span style="color:var(--muted)">optional</span></label>
@@ -230,6 +231,28 @@
           In Outlook Web: Settings → View all → Calendar → Shared calendars → Publish calendar → copy the ICS link.<br>
           Leave blank to disable calendar and WFH/OOO detection.
         </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Custom Images ── -->
+  <div class="panel" id="panel-custom-images">
+    <div class="section">
+      <div class="section-title">Custom Images</div>
+      <p class="hint" style="margin-bottom:14px">Upload images to display in the page rotation (orbit maps, notices, etc.)</p>
+      <div class="field">
+        <label>Image file</label>
+        <input type="file" id="custom-img-file" accept=".png,.jpg,.jpeg,.bmp" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 10px;width:100%">
+      </div>
+      <div class="field" style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" id="btn-upload-image">Upload</button>
+        <span id="upload-status" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Uploaded Images</div>
+      <div id="custom-images-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <p style="color:var(--muted);font-size:13px" id="custom-images-empty">No images uploaded yet.</p>
       </div>
     </div>
   </div>
@@ -742,8 +765,79 @@ $('btn-connect').addEventListener('click', async () => {
   }
 });
 
+// ── Custom Images ──
+async function loadCustomImages() {
+  try {
+    const r = await fetch('/api/custom-images');
+    const d = await r.json();
+    const list = $('custom-images-list');
+    const empty = $('custom-images-empty');
+    list.querySelectorAll('.custom-img-item').forEach(e => e.remove());
+    const images = d.images || [];
+    if (images.length === 0) {
+      empty.style.display = '';
+    } else {
+      empty.style.display = 'none';
+      images.forEach(fname => {
+        const row = document.createElement('div');
+        row.className = 'custom-img-item';
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px';
+        row.innerHTML = `<span style="flex:1;font-size:13px">${escHtml(fname)}</span><button class="btn btn-sm" title="Delete (not yet implemented)" style="color:var(--red);border-color:var(--red)">Delete</button>`;
+        list.appendChild(row);
+      });
+    }
+  } catch(e) {
+    // silently ignore if server doesn't support endpoint yet
+  }
+}
+
+$('btn-upload-image').addEventListener('click', async () => {
+  const fileInput = $('custom-img-file');
+  const statusEl = $('upload-status');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    statusEl.textContent = 'Please select a file first.';
+    statusEl.style.color = 'var(--red)';
+    return;
+  }
+  const file = fileInput.files[0];
+  const fd = new FormData();
+  fd.append('image', file);
+  statusEl.textContent = 'Uploading…';
+  statusEl.style.color = 'var(--muted)';
+  $('btn-upload-image').disabled = true;
+  try {
+    const r = await fetch('/api/upload-image', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (r.ok && d.status === 'saved') {
+      statusEl.textContent = `Saved: ${d.filename}`;
+      statusEl.style.color = 'var(--green)';
+      fileInput.value = '';
+      loadCustomImages();
+      toast(`Image uploaded: ${d.filename} ✓`);
+    } else {
+      statusEl.textContent = d.error || 'Upload failed';
+      statusEl.style.color = 'var(--red)';
+      toast(d.error || 'Upload failed', 'error');
+    }
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+    toast('Upload error: ' + e.message, 'error');
+  } finally {
+    $('btn-upload-image').disabled = false;
+  }
+});
+
+// Load custom images when switching to that tab
+document.querySelectorAll('.tab').forEach(tab => {
+  if (tab.dataset.tab === 'custom-images') {
+    tab.addEventListener('click', loadCustomImages);
+  }
+});
+
 loadConfig();
 checkWifiStatus();
+loadCustomImages();
 </script>
 </body>
 </html>

@@ -39,20 +39,40 @@ apt-get install -y --no-install-recommends \
     python3-pil \
     libatlas-base-dev \
     libopenjp2-7 \
-    libtiff6 \
     fonts-freefont-ttf \
     fonts-dejavu-core \
     network-manager \
-    nmcli \
+    librsvg2-bin \
     git
+
+# libtiff: Bullseye ships libtiff5, Bookworm ships libtiff6
+apt-get install -y --no-install-recommends libtiff6 2>/dev/null \
+    || apt-get install -y --no-install-recommends libtiff5 2>/dev/null \
+    || info "    libtiff not found — Pillow may still work via its own bundled libs"
 
 # cairosvg system dep (for weather icons — optional; degrades gracefully without)
 apt-get install -y --no-install-recommends \
     libcairo2 libcairo2-dev libgdk-pixbuf2.0-0 libffi-dev \
     || info "    cairosvg native libs not available — SVG icons will be skipped"
 
-# ── NetworkManager: ensure it manages the WiFi interface ──────────────────────
-info "==> Ensuring NetworkManager is active …"
+# ── NetworkManager: install but don't break existing WiFi ─────────────────────
+info "==> Configuring NetworkManager …"
+
+# Disable the wait-online service — it blocks boot if WiFi credentials are
+# not yet configured in NM (common on fresh installs over wpa_supplicant).
+systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
+
+# If wpa_supplicant is managing WiFi already, tell NM not to fight it.
+# The setup UI can take over later once credentials are entered there.
+if systemctl is-active --quiet wpa_supplicant; then
+    info "    wpa_supplicant is active — configuring NM to leave WiFi alone for now"
+    mkdir -p /etc/NetworkManager/conf.d
+    cat > /etc/NetworkManager/conf.d/99-unmanaged-wifi.conf <<'EOF'
+[keyfile]
+unmanaged-devices=interface-name:wlan0
+EOF
+fi
+
 systemctl enable NetworkManager 2>/dev/null || true
 systemctl start  NetworkManager 2>/dev/null || true
 
@@ -68,15 +88,22 @@ else
     PIP_EXTRA=""
 fi
 
+# Wait for DNS to be ready (network may still be coming up after NetworkManager start)
+info "    Waiting for network …"
+for i in 1 2 3 4 5; do
+    ping -c1 -W2 pypi.org &>/dev/null && break
+    [[ "$i" -eq 5 ]] && die "No network after 10s — check WiFi and try again"
+    sleep 2
+done
+
 # shellcheck disable=SC2086
 $PYTHON -m pip install --upgrade pip --quiet
-$PYTHON -m pip install $PIP_EXTRA \
-    requests \
-    icalendar \
-    "recurring-ical-events>=2.0" \
-    gpiozero \
-    RPi.GPIO \
-    --quiet || true
+pip_packages=(requests icalendar "recurring-ical-events>=2.0" gpiozero RPi.GPIO)
+for pkg in "${pip_packages[@]}"; do
+    # shellcheck disable=SC2086
+    $PYTHON -m pip install $PIP_EXTRA "$pkg" --quiet \
+        || { red "    FAILED to install $pkg — run:  pip3 install $pkg"; }
+done
 
 # cairosvg is optional — SVG icon rendering; skip on low-mem devices
 if [[ "$TOTAL_KB" -gt 524288 ]]; then
@@ -99,6 +126,20 @@ rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
 }
 
 chmod +x "$INSTALL_DIR/work_display.py" 2>/dev/null || true
+
+# ── pre-convert SVG icons to PNG ───────────────────────────────────────────────
+info "==> Converting weather icons to PNG …"
+if command -v rsvg-convert &>/dev/null; then
+    for svg in "$INSTALL_DIR/icons/"*.svg; do
+        png="${svg%.svg}.png"
+        [[ -f "$png" ]] && continue
+        rsvg-convert -w 200 -h 200 "$svg" -o "$png" 2>/dev/null \
+            && info "    $(basename $png)" \
+            || info "    skipped $(basename $svg)"
+    done
+else
+    info "    rsvg-convert not found — install librsvg2-bin to enable SVG icons"
+fi
 
 # ── systemd service ────────────────────────────────────────────────────────────
 info "==> Installing systemd service …"

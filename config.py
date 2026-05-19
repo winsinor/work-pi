@@ -100,6 +100,15 @@ def load() -> dict:
             merged[k].update(v)
         else:
             merged[k] = v
+
+    # DISPLAY_ROTATION env var overrides config — useful before config.json exists
+    env_rot = os.environ.get("DISPLAY_ROTATION")
+    if env_rot is not None:
+        try:
+            merged["display"]["rotation"] = int(env_rot)
+        except ValueError:
+            pass
+
     return merged
 
 

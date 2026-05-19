@@ -49,7 +49,7 @@
     "wfh":      [{"x": 240, "y": null, "h": 40}],
     "ooo":      [{"x": null, "y": 147, "h": 48}, {"x": null, "y": 196, "h": 19}],
     "holiday":  [{"x": null, "y": null, "h": 37}],
-    "setup":    [{"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 32}, {"x": null, "y": null, "h": 18}],
+    "setup":    [{"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 32}, {"x": null, "y": null, "h": 18}],
     "loading":  [{"x": null, "y": null, "h": 24}],
     "error":    [{"x": null, "y": null, "h": 24}],
     "shutdown": [{"x": null, "y": null, "h": 40}]

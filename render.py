@@ -7,7 +7,7 @@ import math
 import os
 
 try:
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
     _PIL_AVAILABLE = True
 except ImportError:
     _PIL_AVAILABLE = False
@@ -47,6 +47,7 @@ LAYOUT_DEFAULTS: dict = {
         "holiday":        {"enabled": True, "dwell_seconds": 10},
         "setup":          {"enabled": True, "dwell_seconds": 10},
         "loading":        {"enabled": True, "dwell_seconds": 3},
+        "custom_image":   {"enabled": True, "dwell_seconds": 10},
     },
     "line_positions": {
         "clock": [
@@ -84,7 +85,7 @@ LAYOUT_DEFAULTS: dict = {
         "wfh":      [{"x": 240, "y": None, "h": 40}],
         "ooo":      [{"x": None, "y": 147, "h": 48}, {"x": None, "y": 196, "h": 19}],
         "holiday":  [{"x": None, "y": None, "h": 37}],
-        "setup":    [{"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 32}, {"x": None, "y": None, "h": 18}],
+        "setup":    [{"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 32}, {"x": None, "y": None, "h": 18}],
         "loading":  [{"x": None, "y": None, "h": 24}],
         "error":    [{"x": None, "y": None, "h": 24}],
         "shutdown": [{"x": None, "y": None, "h": 40}],
@@ -94,8 +95,15 @@ LAYOUT_DEFAULTS: dict = {
 _layout_cache: dict = {"data": None, "mtime": 0.0}
 
 
-def load_layout(font_path: str | None = None) -> dict:
-    """Merge work_layout.json over LAYOUT_DEFAULTS; cache by file mtime."""
+def load_layout(font_path: str | None = None,
+                display_w: int | None = None,
+                display_h: int | None = None) -> dict:
+    """Merge work_layout.json over LAYOUT_DEFAULTS; cache by file mtime.
+
+    If display_w/display_h are provided and differ from the canvas size in the
+    layout file, every numeric position/size value is scaled proportionally so
+    the layout fits the actual framebuffer without overflowing.
+    """
     import json
     try:
         mtime = os.path.getmtime(_LAYOUT_FILE)
@@ -119,10 +127,64 @@ def load_layout(font_path: str | None = None) -> dict:
             _layout_cache["data"]  = copy.deepcopy(LAYOUT_DEFAULTS)
             _layout_cache["mtime"] = mtime
 
-    layout = _layout_cache["data"]
+    layout = copy.deepcopy(_layout_cache["data"])
+
+    if display_w and display_h:
+        cw = layout["canvas"]["width"]
+        ch = layout["canvas"]["height"]
+        if cw != display_w or ch != display_h:
+            sx = display_w / cw
+            sy = display_h / ch
+            sf = (sx * sy) ** 0.5  # geometric mean for font sizes
+            layout = _scale_layout(layout, sx, sy, sf, display_w, display_h)
+
     if font_path:
-        layout = copy.deepcopy(layout)
         layout["font"]["path"] = font_path
+    return layout
+
+
+def _scale_layout(layout: dict, sx: float, sy: float, sf: float,
+                  w: int, h: int) -> dict:
+    """Return a copy of layout with all positions/sizes scaled."""
+    layout["canvas"]["width"]  = w
+    layout["canvas"]["height"] = h
+
+    def sx_(v): return round(v * sx) if v is not None else None
+    def sy_(v): return round(v * sy) if v is not None else None
+    def sf_(v): return max(8, round(v * sf)) if v is not None else None
+
+    ic = layout.get("icon", {})
+    grid_h = sy_(layout.get("grid", {}).get("height", 0)) or 0
+    max_r  = min(
+        (h - grid_h) // 2 - 4,       # fit vertically above the grid
+        w // 4,                        # at most a quarter of display width
+    )
+    ic["radius"] = min(sf_(ic.get("radius")), max_r)
+    ic["gap"]    = sx_(ic.get("gap"))
+    # clamp x so the icon circle doesn't overflow the right edge
+    ic["x"]      = min(w - ic["radius"] - 4, sx_(ic.get("x")))
+    ic["y"]      = min(h - grid_h - ic["radius"] - 4, sy_(ic.get("y")))
+
+    aq = layout.get("aqi", {})
+    aq["cx"]         = sx_(aq.get("cx"))
+    aq["y"]          = sy_(aq.get("y"))
+    aq["label_size"] = sf_(aq.get("label_size"))
+    aq["value_size"] = sf_(aq.get("value_size"))
+
+    gr = layout.get("grid", {})
+    gr["height"]    = sy_(gr.get("height"))
+    gr["label_size"] = sf_(gr.get("label_size"))
+    gr["temp_size"]  = sf_(gr.get("temp_size"))
+    gr["rain_size"]  = sf_(gr.get("rain_size"))
+    gr["hum_size"]   = sf_(gr.get("hum_size"))
+    gr["wind_size"]  = sf_(gr.get("wind_size"))
+
+    for page_lines in layout.get("line_positions", {}).values():
+        for line in page_lines:
+            line["x"] = sx_(line.get("x"))
+            line["y"] = sy_(line.get("y"))
+            line["h"] = sf_(line.get("h"))
+
     return layout
 
 
@@ -188,7 +250,7 @@ _static_icon_cache: dict = {}
 
 
 def _load_static_icon(name: str, r: int):
-    if not _CAIROSVG_AVAILABLE or not _PIL_AVAILABLE:
+    if not _PIL_AVAILABLE:
         return None
     filename = _STATIC_ICON_MAP.get(name)
     if not filename:
@@ -196,6 +258,22 @@ def _load_static_icon(name: str, r: int):
     cache_key = (name, r)
     if cache_key in _static_icon_cache:
         return _static_icon_cache[cache_key]
+
+    # 1. Try pre-converted PNG first (e.g. icons/clear-day.png)
+    png_filename = filename.rsplit(".", 1)[0] + ".png"
+    png_path = os.path.join(_ICONS_DIR, png_filename)
+    if os.path.exists(png_path):
+        try:
+            img = Image.open(png_path).convert("RGBA").resize((r * 2, r * 2), Image.LANCZOS)
+            _static_icon_cache[cache_key] = img
+            return img
+        except Exception as exc:
+            print(f"[icon] {png_filename}: {exc}")
+
+    # 2. Fall back to cairosvg (SVG → PNG in memory)
+    if not _CAIROSVG_AVAILABLE:
+        _static_icon_cache[cache_key] = None
+        return None
     svg_path = os.path.join(_ICONS_DIR, filename)
     if not os.path.exists(svg_path):
         _static_icon_cache[cache_key] = None
@@ -360,11 +438,31 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
         draw.text((cx - rw // 2, y_rain), rn,  font=rn_f,  fill=rc)
 
 
+# ── Custom image page ────────────────────────────────────────────────────────────────
+
+def render_custom_image_page(image_path: str, layout: dict) -> "Image.Image":
+    """Open image_path, resize/crop to canvas size using ImageOps.fit, return PIL image."""
+    W = layout["canvas"]["width"]
+    H = layout["canvas"]["height"]
+    img = Image.open(image_path).convert("RGB")
+    img = ImageOps.fit(img, (W, H), Image.LANCZOS)
+    return img
+
+
 # ── Main renderer ────────────────────────────────────────────────────────────────────
 
 def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     if layout is None:
         layout = load_layout()
+
+    # Custom image page — bypass normal text renderer
+    if page.get("_name") == "custom_image" and page.get("image_path"):
+        try:
+            return render_custom_image_page(page["image_path"], layout)
+        except Exception as exc:
+            print(f"[render] custom_image {page['image_path']}: {exc}")
+            # Fall through to blank black frame on error
+
     W  = layout["canvas"]["width"]
     H  = layout["canvas"]["height"]
     hh = layout["header"]["height"]
@@ -438,7 +536,8 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
         right      = ln.get("right", "")
         rc         = _pil_color(ln.get("rightColor") or ln.get("color", "white"))
 
-        y_top    = (int(explicit_y) - lh // 2) if explicit_y is not None else auto_y
+        pos_h    = max(6, int(pos.get("h") or 14))
+        y_top    = (int(explicit_y) - pos_h // 2) if explicit_y is not None else auto_y
         right_bound = W - rm
         tw, _ = _text_size(draw, text, f)
 
