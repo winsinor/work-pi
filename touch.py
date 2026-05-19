@@ -84,9 +84,10 @@ def start_touch(
         return max(0, min(W - 1, x)), max(0, min(H - 1, y))
 
     def _loop(f):
-        press_t:   float | None    = None
-        press_raw: tuple[int, int] = (0, 0)
-        cur_raw:   list[int]       = [0, 0]
+        press_t:    float | None    = None
+        press_raw:  tuple[int, int] = (0, 0)
+        cur_raw:    list[int]       = [0, 0]
+        got_coords = False  # first ABS received after BTN_TOUCH press
 
         while True:
             data = f.read(_SIZE)
@@ -99,18 +100,22 @@ def start_touch(
                     cur_raw[0] = value
                 elif code in (ABS_Y, ABS_MT_POSITION_Y):
                     cur_raw[1] = value
+                # XPT2046 sends ABS *after* BTN_TOUCH=1; capture first pair
+                if press_t is not None and not got_coords:
+                    press_raw  = (cur_raw[0], cur_raw[1])
+                    got_coords = True
 
             elif etype == EV_KEY and code == BTN_TOUCH:
                 if value == 1:                              # press
-                    press_t   = time.monotonic()
-                    press_raw = (cur_raw[0], cur_raw[1])
+                    press_t    = time.monotonic()
+                    got_coords = False
                 elif value == 0 and press_t is not None:   # release
                     dur   = time.monotonic() - press_t
                     moved = (abs(cur_raw[0] - press_raw[0])
                              + abs(cur_raw[1] - press_raw[1]))
                     press_t = None
-                    if moved > MAX_MOVE_RAW:
-                        continue  # was a drag
+                    if not got_coords or moved > MAX_MOVE_RAW:
+                        continue  # no coords yet, or was a drag
                     sx, sy = _scale(*press_raw)
                     if dur >= LONG_PRESS_S:
                         on_long_press(sx, sy)
@@ -118,11 +123,13 @@ def start_touch(
                         on_tap(sx, sy)
 
     def _run():
-        try:
-            with open(device, "rb") as f:
-                _loop(f)
-        except Exception as exc:
-            print(f"[touch] {exc}")
+        while True:
+            try:
+                with open(device, "rb") as f:
+                    _loop(f)
+            except Exception as exc:
+                print(f"[touch] {exc}")
+            time.sleep(2)
 
     threading.Thread(target=_run, daemon=True).start()
     print(f"[touch] started on {device}")
