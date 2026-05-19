@@ -37,6 +37,20 @@ def _get_local_ip() -> str:
 
 # ── WiFi helpers (nmcli) ──────────────────────────────────────────────────────────────
 
+_NM_UNMANAGED_CONF = "/etc/NetworkManager/conf.d/99-unmanaged-wifi.conf"
+
+
+def _remove_unmanaged_override():
+    """Delete the install-time NM unmanaged override so NM manages WiFi going forward."""
+    try:
+        if os.path.exists(_NM_UNMANAGED_CONF):
+            os.remove(_NM_UNMANAGED_CONF)
+            subprocess.run(["systemctl", "reload", "NetworkManager"],
+                           capture_output=True, timeout=10)
+    except Exception as exc:
+        print(f"[setup] could not remove unmanaged override: {exc}")
+
+
 def _wifi_scan() -> list[dict]:
     """Return available WiFi networks via nmcli."""
     try:
@@ -201,6 +215,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                     cfg_module.save(current)
                 except Exception:
                     pass
+                _remove_unmanaged_override()
             self._send_json(result)
 
         elif path == "/api/upload-image":
