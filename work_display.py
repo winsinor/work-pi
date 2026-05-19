@@ -183,7 +183,17 @@ def _run_setup_mode(port: int, layout: dict, cfg: dict):
 
 # ── Main display loop ───────────────────────────────────────────────────────────────────
 
+def _hide_console_cursor():
+    for tty in ("/dev/tty0", "/dev/tty1"):
+        try:
+            with open(tty, "w") as f:
+                f.write("\033[?25l")
+        except Exception:
+            pass
+
+
 def main():
+    _hide_console_cursor()
     cfg = cfg_module.load()
 
     # Always start the setup server (enables reconfiguration at any time)

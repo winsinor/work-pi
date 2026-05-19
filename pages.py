@@ -83,9 +83,8 @@ def build_weather_page(store: DataStore) -> dict:
         aqi_color = "green" if aqi_val <= 50 else ("yellow" if aqi_val <= 100 else "red")
         aqi_overlay = {"value": aqi_val, "color": aqi_color}
 
-    now_1h     = now + timedelta(hours=1)
-    first_hour = now_1h.replace(minute=0, second=0, microsecond=0)
-    if now_1h.minute > 0:
+    first_hour = now.replace(minute=0, second=0, microsecond=0)
+    if now.minute > 0:
         first_hour += timedelta(hours=1)
     grid = []
     for step in range(5):

@@ -157,7 +157,15 @@
   <div class="panel" id="panel-location">
     <div class="section">
       <div class="section-title">Location</div>
-      <p class="hint" style="margin-bottom:14px">Used for weather, AQI, and NWS alerts. Find lat/lon at <a href="https://www.latlong.net" target="_blank" style="color:var(--accent)">latlong.net</a>.</p>
+      <p class="hint" style="margin-bottom:14px">Used for weather, AQI, and NWS alerts.</p>
+      <div class="field">
+        <label>Search by city, address, or zip code</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="loc-search" placeholder="e.g. Louisville, KY or 40202">
+          <button class="btn" id="btn-geocode" style="white-space:nowrap">Look up</button>
+        </div>
+        <div id="geocode-status" class="hint" style="margin-top:4px"></div>
+      </div>
       <div class="row">
         <div class="field">
           <label>Latitude</label>
@@ -911,6 +919,43 @@ $('btn-upload-image').addEventListener('click', async () => {
 
 loadConfig();
 checkWifiStatus();
+
+// Live required-field status update
+['addr-home', 'addr-work', 'key-tomtom'].forEach(id => {
+  $(id).addEventListener('input', () => updateStatus(collectForm()));
+});
+
+// Geocode lookup
+$('btn-geocode').addEventListener('click', async () => {
+  const q = $('loc-search').value.trim();
+  if (!q) return;
+  const statusEl = $('geocode-status');
+  statusEl.textContent = 'Searching…';
+  statusEl.style.color = 'var(--muted)';
+  $('btn-geocode').disabled = true;
+  try {
+    const r = await fetch('/api/geocode?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (d.lat !== undefined) {
+      $('loc-lat').value = d.lat.toFixed(4);
+      $('loc-lon').value = d.lon.toFixed(4);
+      statusEl.textContent = '✓ ' + (d.display_name || 'Found');
+      statusEl.style.color = 'var(--green)';
+    } else {
+      statusEl.textContent = d.error || 'Location not found';
+      statusEl.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    statusEl.textContent = 'Error: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  } finally {
+    $('btn-geocode').disabled = false;
+  }
+});
+
+$('loc-search').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('btn-geocode').click();
+});
 </script>
 </body>
 </html>

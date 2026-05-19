@@ -8,6 +8,8 @@ import os
 import socket
 import subprocess
 import threading
+import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import config as cfg_module
@@ -97,13 +99,13 @@ def _wifi_status() -> dict:
     """Return current WiFi connection status."""
     try:
         result = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE,STATE,CONNECTION", "connection", "show", "--active"],
+            ["nmcli", "-t", "-f", "ACTIVE,SSID", "device", "wifi", "list"],
             capture_output=True, text=True, timeout=5,
         )
         for line in result.stdout.splitlines():
-            parts = line.split(":")
-            if len(parts) >= 3 and "wireless" in parts[1]:
-                return {"status": "connected", "ssid": parts[0], "state": parts[2]}
+            parts = line.split(":", 1)
+            if len(parts) == 2 and parts[0] == "yes" and parts[1].strip():
+                return {"status": "connected", "ssid": parts[1].strip()}
         return {"status": "disconnected"}
     except Exception as exc:
         return {"status": "unknown", "message": str(exc)}
@@ -167,6 +169,30 @@ class SetupHandler(BaseHTTPRequestHandler):
                     if ext in _ALLOWED_IMAGE_EXTS:
                         filenames.append(fname)
             self._send_json({"images": filenames})
+
+        elif path == "/api/geocode":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            q  = (qs.get("q") or [""])[0].strip()
+            if not q:
+                self._send_json({"error": "q parameter required"}, 400)
+                return
+            try:
+                url = ("https://nominatim.openstreetmap.org/search"
+                       f"?format=json&q={urllib.parse.quote(q)}&limit=1")
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "work-pi-dashboard/1.0"})
+                with urllib.request.urlopen(req, timeout=6) as resp:
+                    data = json.loads(resp.read())
+                if data:
+                    self._send_json({
+                        "lat": float(data[0]["lat"]),
+                        "lon": float(data[0]["lon"]),
+                        "display_name": data[0].get("display_name", ""),
+                    })
+                else:
+                    self._send_json({"error": "Location not found"}, 404)
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, 502)
 
         else:
             self.send_error(404)
