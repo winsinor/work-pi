@@ -291,10 +291,18 @@ def main():
         # Inject custom image pages from custom_images/ directory
         _custom_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "custom_images")
         if os.path.isdir(_custom_dir):
-            _img_exts = (".png", ".jpg", ".jpeg", ".bmp")
-            for _img_file in sorted(glob.glob(os.path.join(_custom_dir, "*"))):
-                if os.path.splitext(_img_file)[1].lower() in _img_exts:
-                    pages.append({"_name": "custom_image", "image_path": _img_file})
+            _ci_cfg   = cfg.get("custom_images", {})
+            _ci_start = _ci_cfg.get("display_start_h", 0)
+            _ci_end   = _ci_cfg.get("display_end_h", 23)
+            from data import local_now
+            _now_h = local_now(cfg).hour
+            _in_window = (_ci_start <= _ci_end and _ci_start <= _now_h <= _ci_end) or \
+                         (_ci_start > _ci_end and (_now_h >= _ci_start or _now_h <= _ci_end))
+            if _in_window:
+                _img_exts = (".png", ".jpg", ".jpeg", ".bmp")
+                for _img_file in sorted(glob.glob(os.path.join(_custom_dir, "*"))):
+                    if os.path.splitext(_img_file)[1].lower() in _img_exts:
+                        pages.append({"_name": "custom_image", "image_path": _img_file})
 
         page  = pages[idx % len(pages)]
         dwell = (layout.get("pages", {})

@@ -272,6 +272,22 @@
       </div>
     </div>
     <div class="section">
+      <div class="section-title">Display Time Window</div>
+      <p class="hint" style="margin-bottom:14px">Only show custom images during this hour range (24h). Use 0–23 to always show.</p>
+      <div class="row">
+        <div class="field">
+          <label>Show from hour</label>
+          <input type="number" id="ci-start-h" min="0" max="23" value="0">
+          <p class="hint">0 = midnight</p>
+        </div>
+        <div class="field">
+          <label>Show until hour</label>
+          <input type="number" id="ci-end-h" min="0" max="23" value="23">
+          <p class="hint">23 = 11 PM</p>
+        </div>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title">Uploaded Images</div>
       <div id="custom-images-list" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
         <p style="color:var(--muted);font-size:13px" id="custom-images-empty">No images uploaded yet.</p>
@@ -307,7 +323,7 @@
     <div class="section">
       <div class="section-title">Layout Editor</div>
       <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Visually adjust text positions, font sizes, and page layout.</p>
-      <a href="/editor" target="_blank" class="btn btn-primary" style="display:inline-flex;text-decoration:none">Open Layout Editor ↗</a>
+      <a href="/editor/work" target="_blank" class="btn btn-primary" style="display:inline-flex;text-decoration:none">Open Layout Editor ↗</a>
     </div>
     <div class="section">
       <div class="section-title">Screen Resolution</div>
@@ -418,13 +434,7 @@
           <span class="range-val" id="int-calendar-val"></span>
         </div>
       </div>
-      <div class="field">
-        <label>AQI refresh</label>
-        <div style="display:flex; align-items:center; gap:8px">
-          <input type="range" id="int-aqi" min="60" max="3600" step="60">
-          <span class="range-val" id="int-aqi-val"></span>
-        </div>
-      </div>
+      <p class="hint">AQI refreshes on the same schedule as weather.</p>
     </div>
     <div class="section">
       <div class="section-title">Commute Window</div>
@@ -617,7 +627,6 @@ bindRange('disp-dwell',   'disp-dwell-val',   v => `${v}s`);
 bindRange('int-weather',  'int-weather-val',  fmtSec);
 bindRange('int-commute',  'int-commute-val',  fmtSec);
 bindRange('int-calendar', 'int-calendar-val', fmtSec);
-bindRange('int-aqi',      'int-aqi-val',      fmtSec);
 
 $('btn-enabled').addEventListener('change', () => {
   $('btn-config-fields').style.display = $('btn-enabled').checked ? '' : 'none';
@@ -681,10 +690,12 @@ function populateForm(cfg) {
   $('int-weather').value  = cfg.weather?.update_interval_s  || 600;
   $('int-commute').value  = cfg.commute?.update_interval_s  || 300;
   $('int-calendar').value = cfg.calendar?.update_interval_s || 600;
-  $('int-aqi').value      = cfg.aqi?.update_interval_s      || 900;
-  ['int-weather','int-commute','int-calendar','int-aqi'].forEach(id => {
+  ['int-weather','int-commute','int-calendar'].forEach(id => {
     document.getElementById(id).dispatchEvent(new Event('input'));
   });
+
+  $('ci-start-h').value = cfg.custom_images?.display_start_h ?? 0;
+  $('ci-end-h').value   = cfg.custom_images?.display_end_h   ?? 23;
 
   $('commute-start').value    = cfg.commute?.window_start_h ?? 15;
   $('commute-end').value      = cfg.commute?.window_end_h   ?? 18;
@@ -752,7 +763,11 @@ function collectForm() {
       window_end_h:      +$('commute-end').value,
       weekdays_only:     $('commute-weekdays').checked,
     },
-    aqi:        { update_interval_s: +$('int-aqi').value },
+    aqi: { update_interval_s: +$('int-weather').value },
+    custom_images: {
+      display_start_h: +$('ci-start-h').value,
+      display_end_h:   +$('ci-end-h').value,
+    },
     setup_port: +$('setup-port').value,
   };
 }
