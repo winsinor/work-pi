@@ -8,6 +8,7 @@ setup URL and starts the web config server.
 
 import glob
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -18,6 +19,8 @@ sys.stdout.reconfigure(line_buffering=True)
 
 import config as cfg_module
 import setup_server
+import stats as stats_mod
+import touch as touch_mod
 from data import DataStore
 from pages import (
     build_setup_page, build_loading_page, build_shutdown_page,
@@ -218,6 +221,50 @@ def main():
     _start_button_threads(cfg, layout, advance_event)
     _start_fetch_threads(store)
 
+    # ── Stats monitor (always running) ────────────────────────────────────────
+    _stats_mon    = stats_mod.StatsMonitor()
+    _stats_active = False
+    _stats_wake   = threading.Event()
+
+    # ── Navigation queue (touch + GPIO button share it) ───────────────────────
+    _nav_q: queue.Queue[int] = queue.Queue()
+
+    # Wire existing GPIO advance button into the nav queue
+    _orig_advance = advance_event
+
+    def _gpio_advance_watcher():
+        while True:
+            _orig_advance.wait()
+            _orig_advance.clear()
+            _nav_q.put(+1)
+
+    threading.Thread(target=_gpio_advance_watcher, daemon=True).start()
+
+    # ── Touch callbacks ───────────────────────────────────────────────────────
+    def _on_tap(sx: int, sy: int) -> None:
+        nonlocal _stats_active
+        if _stats_active:
+            if sy >= int(H * stats_mod.POWEROFF_Y_FRAC):
+                _do_shutdown(cfg, layout)
+            else:
+                _stats_active = False
+                _stats_wake.set()
+        else:
+            _nav_q.put(+1 if sx >= W // 2 else -1)
+
+    def _on_long_press(sx: int, sy: int) -> None:
+        nonlocal _stats_active
+        if not _stats_active and W // 3 <= sx <= 2 * W // 3:
+            _stats_active = True
+            _stats_wake.set()
+
+    _touch_dev = touch_mod.find_touch_device(cfg)
+    if _touch_dev:
+        touch_mod.start_touch(_touch_dev, W, H, cfg, _on_tap, _on_long_press)
+    else:
+        print("[touch] no touch device found — touch disabled")
+
+    # ── Initial loading screen ────────────────────────────────────────────────
     loading_frame = render_page_rgb565(build_loading_page(), layout, rotate_180=(rot == 180))
     _write_frame(loading_frame, fb)
 
@@ -254,15 +301,35 @@ def main():
                       .get(page.get("_name", ""), {})
                       .get("dwell_seconds", default_dwell))
 
+        # Always render the next page (keeps CPU load representative
+        # whether or not stats are currently being displayed)
         try:
             frame = render_page_rgb565(page, layout, rotate_180=(rot == 180))
-            _write_frame(frame, fb)
         except Exception as exc:
             print(f"[render] {exc}")
+            frame = None
 
-        idx = (idx + 1) % len(pages)
-        advance_event.wait(timeout=dwell)
-        advance_event.clear()
+        if _stats_active:
+            # Write stats overlay; page render above runs for realistic CPU load
+            try:
+                sf = stats_mod.render_stats_rgb565(
+                    _stats_mon, W, H, font_path, rot == 180)
+                _write_frame(sf, fb)
+            except Exception as exc:
+                print(f"[stats] {exc}")
+            # Refresh every 2 s or immediately on dismiss/activate
+            _stats_wake.wait(timeout=2)
+            _stats_wake.clear()
+            # Do not advance page index while stats are shown
+        else:
+            if frame:
+                _write_frame(frame, fb)
+            # Wait for navigation input or auto-advance on dwell timeout
+            try:
+                delta = _nav_q.get(timeout=dwell)
+                idx = (idx + delta) % len(pages)
+            except queue.Empty:
+                idx = (idx + 1) % len(pages)
 
         store.display.fetched_at = 0.0
 
