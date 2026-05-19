@@ -11,13 +11,14 @@ from data import (
     get_weather, get_aqi, get_alerts, get_commute,
     get_ics_events, get_work_state,
     in_commute_window, later_today_desc, wind_cardinal,
+    local_now,
 )
 
 
 # ── Individual page builders ─────────────────────────────────────────────────
 
-def build_clock_page() -> dict:
-    now = datetime.now()
+def build_clock_page(tz: str | None = None) -> dict:
+    now = local_now({"location": {"timezone": tz}}) if tz else datetime.now()
     return {
         "_name": "clock",
         "title": "Clock",
@@ -38,7 +39,7 @@ def build_weather_page(store: DataStore) -> dict:
     cur    = weather.get("current", {})
     daily  = weather.get("daily", {})
     hourly = weather.get("hourly", {})
-    now    = datetime.now()
+    now    = local_now(store.cfg)
 
     temp    = cur.get("temperature_2m", 0)
     wmo     = cur.get("weather_code", 0)
@@ -143,7 +144,7 @@ def build_commute_page(store: DataStore) -> dict | None:
 
 def build_calendar_page(store: DataStore) -> dict | None:
     events = get_ics_events(store)
-    now    = datetime.now()
+    now    = local_now(store.cfg)
     today  = now.date()
 
     upcoming = []
@@ -281,7 +282,8 @@ def build_display(store: DataStore) -> dict:
             {"text": title_text, "size": 3, "color": "white"},
         ]}], "display_mode": "HOLIDAY"}
 
-    pages = [build_clock_page()]
+    tz = store.cfg.get("location", {}).get("timezone")
+    pages = [build_clock_page(tz)]
     for fn in (build_calendar_page, build_weather_page, build_commute_page):
         try:
             page = fn(store)

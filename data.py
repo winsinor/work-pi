@@ -7,6 +7,11 @@ import time
 from datetime import date, datetime, timedelta
 from urllib.parse import quote
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    ZoneInfo = None  # Python < 3.9 fallback — system timezone used
+
 import requests
 
 try:
@@ -15,6 +20,14 @@ try:
     _ICS_AVAILABLE = True
 except ImportError:
     _ICS_AVAILABLE = False
+
+
+def local_now(cfg: dict) -> datetime:
+    """Return the current time as a naive datetime in the configured timezone."""
+    tz = cfg.get("location", {}).get("timezone") if cfg else None
+    if tz and ZoneInfo:
+        return datetime.now(ZoneInfo(tz)).replace(tzinfo=None)
+    return datetime.now()
 
 
 # ── WMO code tables ──────────────────────────────────────────────────────────────────
@@ -216,7 +229,7 @@ def _fetch_route(stop_names: list[str], coords: dict, tomtom_key: str) -> dict:
 # ── Commute window check ───────────────────────────────────────────────────────────────
 
 def in_commute_window(cfg: dict) -> bool:
-    dt = datetime.now()
+    dt = local_now(cfg)
     if cfg["commute"]["weekdays_only"] and dt.weekday() >= 5:
         return False
     t = dt.hour * 60 + dt.minute
@@ -319,7 +332,7 @@ def fetch_aqi(store: DataStore) -> dict:
     hourly  = r.json().get("hourly", {})
     times   = hourly.get("time", [])
     aqis    = hourly.get("us_aqi", [])
-    now_str = datetime.now().strftime("%Y-%m-%dT%H:00")
+    now_str = local_now(store.cfg).strftime("%Y-%m-%dT%H:00")
     idx     = times.index(now_str) if now_str in times else -1
     if idx < 0 or idx >= len(aqis) or aqis[idx] is None:
         return {"aqi": None}
@@ -382,7 +395,7 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
         r = requests.get(ics_url, timeout=15)
         r.raise_for_status()
         cal    = icalendar.Calendar.from_ical(r.content)
-        now    = datetime.now()
+        now    = local_now(store.cfg)
         start  = now - timedelta(minutes=30)
         end    = now + timedelta(hours=24)
         raw    = recurring_ical_events.of(cal).between(start, end)
@@ -468,7 +481,7 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
     r = requests.get(ics_url, timeout=15)
     r.raise_for_status()
     cal       = icalendar.Calendar.from_ical(r.content)
-    today     = datetime.now().date()
+    today     = local_now(store.cfg).date()
     day_start = datetime.combine(today, datetime.min.time())
     day_end   = datetime.combine(today + timedelta(days=1), datetime.min.time())
     raw       = recurring_ical_events.of(cal).between(day_start, day_end)
