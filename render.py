@@ -85,7 +85,7 @@ LAYOUT_DEFAULTS: dict = {
         "wfh":      [{"x": 240, "y": None, "h": 40}],
         "ooo":      [{"x": None, "y": 147, "h": 48}, {"x": None, "y": 196, "h": 19}],
         "holiday":  [{"x": None, "y": None, "h": 37}],
-        "setup":    [{"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 32}, {"x": None, "y": None, "h": 18}],
+        "setup":    [{"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 24}, {"x": None, "y": None, "h": 32}, {"x": None, "y": None, "h": 18}],
         "loading":  [{"x": None, "y": None, "h": 24}],
         "error":    [{"x": None, "y": None, "h": 24}],
         "shutdown": [{"x": None, "y": None, "h": 40}],
@@ -536,7 +536,8 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
         right      = ln.get("right", "")
         rc         = _pil_color(ln.get("rightColor") or ln.get("color", "white"))
 
-        y_top    = (int(explicit_y) - lh // 2) if explicit_y is not None else auto_y
+        pos_h    = max(6, int(pos.get("h") or 14))
+        y_top    = (int(explicit_y) - pos_h // 2) if explicit_y is not None else auto_y
         right_bound = W - rm
         tw, _ = _text_size(draw, text, f)
 

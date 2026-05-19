@@ -1,6 +1,7 @@
 """Page builders — assemble page dicts for the renderer."""
 from __future__ import annotations
 
+import socket
 import time
 from datetime import datetime, timedelta
 
@@ -197,14 +198,33 @@ def build_calendar_page(store: DataStore) -> dict | None:
 
 
 def build_setup_page(ip: str, port: int) -> dict:
-    return {
-        "_name": "setup",
-        "title": "Setup Required",
-        "lines": [
+    no_network = ip.startswith("127.")
+    try:
+        hostname = socket.gethostname()
+    except Exception:
+        hostname = None
+
+    if no_network:
+        lines = [
+            {"text": "WiFi not connected", "size": 1, "color": "red"},
+            {"text": "SSH in and open:", "size": 0, "color": "darkgrey"},
+        ]
+        if hostname:
+            lines.append({"text": f"http://{hostname}.local:{port}", "size": 1, "color": "white"})
+        lines.append({"text": "to configure this display", "size": 0, "color": "darkgrey"})
+    else:
+        lines = [
             {"text": "Open in browser:", "size": 1, "color": "cyan"},
             {"text": f"http://{ip}:{port}", "size": 1, "color": "white"},
             {"text": "to configure this display", "size": 0, "color": "darkgrey"},
-        ],
+        ]
+        if hostname:
+            lines.append({"text": f"or {hostname}.local:{port}", "size": 0, "color": "darkgrey"})
+
+    return {
+        "_name": "setup",
+        "title": "Setup Required",
+        "lines": lines,
     }
 
 
