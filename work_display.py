@@ -67,7 +67,8 @@ def _do_shutdown(cfg: dict, layout: dict):
 # ── GPIO buttons ───────────────────────────────────────────────────────────────────
 
 def _start_button_threads(cfg: dict, layout: dict,
-                           advance_event: threading.Event) -> bool:
+                           advance_event: threading.Event,
+                           toggle_stats_fn) -> bool:
     """Wire up GPIO buttons. Returns True if buttons initialised successfully."""
     btn_cfg = cfg.get("buttons", {})
     if not btn_cfg.get("enabled", True):
@@ -78,7 +79,7 @@ def _start_button_threads(cfg: dict, layout: dict,
                     hold_time=btn_cfg.get("shutdown_hold_s", 5))
         k3 = Button(btn_cfg["advance_gpio"],  pull_up=btn_cfg.get("pull_up", True))
 
-        k2.when_held = lambda: _do_shutdown(cfg, layout)
+        k2.when_held = lambda: toggle_stats_fn()
 
         def _k3_loop():
             while True:
@@ -218,13 +219,20 @@ def main():
     store = DataStore(cfg)
 
     advance_event = threading.Event()
-    _start_button_threads(cfg, layout, advance_event)
-    _start_fetch_threads(store)
 
     # ── Stats monitor (always running) ────────────────────────────────────────
     _stats_mon    = stats_mod.StatsMonitor()
     _stats_active = False
     _stats_wake   = threading.Event()
+
+    def _toggle_stats():
+        nonlocal _stats_active
+        _stats_active = not _stats_active
+        print(f"[button] stats {'on' if _stats_active else 'off'}")
+        _stats_wake.set()
+
+    _start_button_threads(cfg, layout, advance_event, _toggle_stats)
+    _start_fetch_threads(store)
 
     # ── Navigation queue (touch + GPIO button share it) ───────────────────────
     _nav_q: queue.Queue[int] = queue.Queue()
