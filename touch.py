@@ -71,6 +71,7 @@ def start_touch(
     swap  = tcfg.get("swap_axes", False)
     flip_x = tcfg.get("flip_x",  False)
     flip_y = tcfg.get("flip_y",  False)
+    debug = tcfg.get("debug", False)
 
     def _scale(raw_x: int, raw_y: int) -> tuple[int, int]:
         if swap:
@@ -95,6 +96,8 @@ def start_touch(
             if not data or len(data) < _SIZE:
                 break
             _, _, etype, code, value = struct.unpack(_FMT, data)
+            if debug and etype:
+                print(f"[touch] ev type={etype:#x} code={code:#x} val={value}")
 
             if etype == EV_ABS:
                 if code in (ABS_X, ABS_MT_POSITION_X):
