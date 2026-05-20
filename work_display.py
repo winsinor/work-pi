@@ -75,9 +75,8 @@ def _start_button_threads(cfg: dict, layout: dict,
         return False
     try:
         from gpiozero import Button
-        k2 = Button(btn_cfg["shutdown_gpio"], pull_up=btn_cfg.get("pull_up", True),
-                    hold_time=btn_cfg.get("shutdown_hold_s", 5))
-        k3 = Button(btn_cfg["advance_gpio"],  pull_up=btn_cfg.get("pull_up", True))
+        k2 = Button(btn_cfg.get("shutdown_gpio", 23), pull_up=btn_cfg.get("pull_up", True))
+        k3 = Button(btn_cfg.get("advance_gpio",  24), pull_up=btn_cfg.get("pull_up", True))
 
         k2.when_pressed = lambda: toggle_stats_fn()
 

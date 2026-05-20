@@ -678,7 +678,6 @@ function populateForm(cfg) {
   $('btn-config-fields').style.display = btnEnabled ? '' : 'none';
   $('btn-shutdown-gpio').value = cfg.buttons?.shutdown_gpio ?? 23;
   $('btn-advance-gpio').value  = cfg.buttons?.advance_gpio  ?? 24;
-  $('btn-hold-secs').value     = cfg.buttons?.shutdown_hold_s ?? 5;
   $('btn-pull-up').value       = String(cfg.buttons?.pull_up !== false);
 
   $('font-path').value = cfg.fonts?.path || '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf';
@@ -745,11 +744,10 @@ function collectForm() {
       page_dwell_s: +$('disp-dwell').value,
     },
     buttons: {
-      enabled:          $('btn-enabled').checked,
-      shutdown_gpio:    +$('btn-shutdown-gpio').value,
-      advance_gpio:     +$('btn-advance-gpio').value,
-      shutdown_hold_s:  +$('btn-hold-secs').value,
-      pull_up:          $('btn-pull-up').value === 'true',
+      enabled:       $('btn-enabled').checked,
+      shutdown_gpio: +$('btn-shutdown-gpio').value,
+      advance_gpio:  +$('btn-advance-gpio').value,
+      pull_up:       $('btn-pull-up').value === 'true',
     },
     fonts:   { path: $('font-path').value.trim() },
     weather: { update_interval_s: +$('int-weather').value },
