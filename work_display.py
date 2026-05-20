@@ -312,9 +312,7 @@ def main():
                         pages.append({"_name": "custom_image", "image_path": _img_file})
 
         page  = pages[idx % len(pages)]
-        dwell = (layout.get("pages", {})
-                      .get(page.get("_name", ""), {})
-                      .get("dwell_seconds", default_dwell))
+        dwell = default_dwell
 
         if _stats_active:
             try:
