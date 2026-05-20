@@ -13,7 +13,7 @@ except ImportError:
     _PIL_OK = False
 
 # Taps at or below this Y-fraction trigger power-off
-POWEROFF_Y_FRAC = 0.52
+POWEROFF_Y_FRAC = 0.59
 
 
 class StatsMonitor:
@@ -167,11 +167,11 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     disk_c = (220, 200, 60)
     temp_c = (255, 80,  80)  if temp and temp > 70 else (200, 200, 200)
 
-    ROW_H = 34   # height of each bar row
-    LBL_W = 58   # label column width
-    VAL_W = 64   # value column width on right
-    BAR_H = 14   # progress bar height
-    GAP   = 4    # gap between rows
+    ROW_H = 26   # height of each bar row
+    LBL_W = 54   # label column width
+    VAL_W = 60   # value column width on right
+    BAR_H = 12   # progress bar height
+    GAP   = 3    # gap between rows
 
     def bar_row(y, label, val_str, val_c, pct, bar_c):
         ty = y + (ROW_H - 22) // 2
@@ -185,19 +185,19 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
             draw.rectangle([bx, by, bx + fw, by + BAR_H], fill=bar_c)
         draw.text((W - VAL_W + 4, ty), val_str, fill=val_c, font=f_big)
 
-    y0 = 8
+    y0 = 6
     bar_row(y0,                   "CPU",  f"{cpu:.0f}%",      cpu_c,  cpu,      cpu_c)
     bar_row(y0 + ROW_H + GAP,     "RAM",  f"{ram_pct:.0f}%",  ram_c,  ram_pct,  ram_c)
     bar_row(y0 + 2 * (ROW_H+GAP), "DISK", f"{disk_pct:.0f}%", disk_c, disk_pct, disk_c)
 
     # Secondary info — two compact rows, each split left/right
-    y_info = y0 + 3 * (ROW_H + GAP) + 8
+    y_info = y0 + 3 * (ROW_H + GAP) + 6
     draw.text((4,      y_info), f"TEMP {temp:.1f} C" if temp else "TEMP --",
               fill=temp_c, font=f_info)
     draw.text((W // 2, y_info), f"MEM {_fmt_bytes(ram_u)} / {_fmt_bytes(ram_t)}",
               fill=(140, 140, 160), font=f_info)
 
-    y_net = y_info + 17
+    y_net = y_info + 16
     draw.text((4,      y_net), f"DOWN {_fmt_bytes(d.get('rx_bps', 0))}/s",
               fill=(80, 180, 255), font=f_info)
     draw.text((W // 2, y_net), f"UP {_fmt_bytes(d.get('tx_bps', 0))}/s",
