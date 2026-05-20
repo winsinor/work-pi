@@ -79,7 +79,7 @@ def _start_button_threads(cfg: dict, layout: dict,
                     hold_time=btn_cfg.get("shutdown_hold_s", 5))
         k3 = Button(btn_cfg["advance_gpio"],  pull_up=btn_cfg.get("pull_up", True))
 
-        k2.when_held = lambda: toggle_stats_fn()
+        k2.when_pressed = lambda: toggle_stats_fn()
 
         def _k3_loop():
             while True:
