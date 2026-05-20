@@ -136,93 +136,70 @@ def _fmt_bytes(n: float) -> str:
 
 
 def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
-                        font_path: str, rotate_180: bool = False) -> bytes:
-    """Render the stats overlay and return RGB565 bytes."""
+                        rotate_180: bool = False) -> bytes:
+    """Render a fast bitmap-font stats overlay and return RGB565 bytes."""
     if not _PIL_OK:
         return bytes(W * H * 2)
 
     d    = monitor.get()
-    img  = Image.new("RGB", (W, H), (8, 8, 24))
+    img  = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    def _font(size: int):
-        try:
-            return ImageFont.truetype(font_path, size)
-        except Exception:
-            return ImageFont.load_default()
+    # Use PIL's built-in bitmap font — no TrueType, no file I/O
+    try:
+        font = ImageFont.load_default(size=16)
+        fsm  = ImageFont.load_default(size=13)
+    except TypeError:  # Pillow < 10
+        font = ImageFont.load_default()
+        fsm  = font
 
-    f_title = _font(16)
-    f_label = _font(13)
-    f_sm    = _font(11)
-    f_btn   = _font(15)
-
-    # ── Title ──────────────────────────────────────────────────────────────────
-    draw.text((W // 2, 5), "System Stats",
-              fill=(100, 200, 255), font=f_title, anchor="mt")
-
-    # ── Bar helper ─────────────────────────────────────────────────────────────
-    def bar(y: int, label: str, pct: float, color: tuple):
-        bx, bw = 52, W - 52 - 38
-        bh = 14
-        draw.text((5, y), label, fill=(180, 180, 180), font=f_label)
-        draw.rectangle([bx, y, bx + bw, y + bh],
-                       fill=(28, 28, 48), outline=(50, 50, 72))
-        fw = max(0, int(bw * min(pct, 100) / 100))
-        if fw:
-            draw.rectangle([bx, y, bx + fw, y + bh], fill=color)
-        draw.text((bx + bw + 4, y), f"{pct:.0f}%",
-                  fill=(160, 160, 160), font=f_sm)
-
-    # ── Stats rows ─────────────────────────────────────────────────────────────
-    cpu      = d.get("cpu_pct", 0.0)
-    ram_u    = d.get("ram_used",  0)
-    ram_t    = d.get("ram_total", 1)
-    disk_u   = d.get("disk_used",  0)
-    disk_t   = d.get("disk_total", 1)
+    cpu    = d.get("cpu_pct", 0.0)
+    ram_u  = d.get("ram_used",  0)
+    ram_t  = d.get("ram_total", 1)
+    disk_u = d.get("disk_used",  0)
+    disk_t = d.get("disk_total", 1)
     ram_pct  = ram_u  / ram_t  * 100 if ram_t  else 0
     disk_pct = disk_u / disk_t * 100 if disk_t else 0
+    temp   = d.get("temp_c")
 
-    cpu_c  = (200, 60, 60) if cpu > 80 else (220, 160, 40) if cpu > 60 else (60, 200, 80)
-    ram_c  = (200, 100, 40) if ram_pct > 80 else (60, 150, 220)
-    disk_c = (200, 180, 40)
+    cpu_c  = (255, 80,  80)  if cpu      > 80 else (255, 200, 0) if cpu      > 60 else (80, 255, 80)
+    ram_c  = (255, 140, 0)   if ram_pct  > 80 else (80,  180, 255)
+    disk_c = (220, 200, 60)
+    temp_c = (255, 80,  80)  if temp and temp > 70 else (200, 200, 200)
 
-    bar(27, "CPU",  cpu,      cpu_c)
-    bar(48, "RAM",  ram_pct,  ram_c)
-    bar(69, "DISK", disk_pct, disk_c)
+    def row(y, label, val_str, val_c, pct=None, bar_c=None):
+        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
+        if pct is not None:
+            bx, bw, bh = 52, W - 100, 12
+            draw.rectangle([bx, y + 1, bx + bw, y + bh], fill=(30, 30, 30))
+            fw = max(0, int(bw * min(pct, 100) / 100))
+            if fw:
+                draw.rectangle([bx, y + 1, bx + fw, y + bh], fill=bar_c)
+        draw.text((W - 4, y), val_str, fill=val_c, font=fsm, anchor="rt")
 
-    draw.text((5, 90), f"{_fmt_bytes(ram_u)} / {_fmt_bytes(ram_t)}",
-              fill=(100, 100, 130), font=f_sm)
+    row(4,  "CPU",  f"{cpu:.0f}%",       cpu_c,  cpu,      cpu_c)
+    row(20, "RAM",  f"{ram_pct:.0f}%",   ram_c,  ram_pct,  ram_c)
+    row(36, "DISK", f"{disk_pct:.0f}%",  disk_c, disk_pct, disk_c)
+    row(52, "MEM",  f"{_fmt_bytes(ram_u)}/{_fmt_bytes(ram_t)}", (140, 140, 160))
+    row(68, "TEMP", f"{temp:.1f}C" if temp else "--",           temp_c)
+    row(84, "DOWN", f"{_fmt_bytes(d.get('rx_bps', 0))}/s",      (80, 180, 255))
+    row(100,"UP",   f"{_fmt_bytes(d.get('tx_bps', 0))}/s",      (80, 220, 100))
 
-    temp = d.get("temp_c")
-    tc   = (255, 80, 80) if temp and temp > 70 else (180, 180, 180)
-    draw.text((5, 106), f"Temp  {temp:.1f}°C" if temp else "Temp  —",
-              fill=tc, font=f_label)
-
-    draw.text((5, 126), f"↓  {_fmt_bytes(d.get('rx_bps', 0))}/s",
-              fill=(80, 180, 255), font=f_label)
-    draw.text((5, 144), f"↑  {_fmt_bytes(d.get('tx_bps', 0))}/s",
-              fill=(80, 220, 100), font=f_label)
-
-    # ── Power-off button ───────────────────────────────────────────────────────
+    # Power-off button
     py = int(H * POWEROFF_Y_FRAC)
-    draw.line([(4, py - 3), (W - 4, py - 3)], fill=(50, 50, 80))
-    draw.rectangle([4, py, W - 4, H - 4],
-                   fill=(100, 18, 18), outline=(200, 50, 50), width=2)
-    draw.text((W // 2, py + (H - 4 - py) // 2), "Power Off",
-              fill=(255, 200, 200), font=f_btn, anchor="mm")
+    draw.line([(0, py - 2), (W, py - 2)], fill=(60, 60, 60))
+    draw.rectangle([4, py + 2, W - 4, H - 4], fill=(120, 20, 20), outline=(220, 60, 60))
+    draw.text((W // 2, py + (H - py) // 2), "Power Off",
+              fill=(255, 200, 200), font=font, anchor="mm")
 
     if rotate_180:
         img = img.rotate(180)
 
-    # ── PIL → RGB565 ───────────────────────────────────────────────────────────
-    W2, H2 = img.size
-    buf = bytearray(W2 * H2 * 2)
-    px  = img.load()
-    for y in range(H2):
-        for x in range(W2):
-            r, g, b = px[x, y]
-            p = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-            i = (y * W2 + x) * 2
-            buf[i]     = p & 0xFF
-            buf[i + 1] = (p >> 8) & 0xFF
+    raw = img.tobytes()  # RGBRGB...
+    buf = bytearray(W * H * 2)
+    for i in range(W * H):
+        r, g, b = raw[i*3], raw[i*3+1], raw[i*3+2]
+        p = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+        buf[i*2]   = p & 0xFF
+        buf[i*2+1] = p >> 8
     return bytes(buf)

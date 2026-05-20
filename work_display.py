@@ -317,30 +317,23 @@ def main():
                       .get(page.get("_name", ""), {})
                       .get("dwell_seconds", default_dwell))
 
-        # Always render the next page (keeps CPU load representative
-        # whether or not stats are currently being displayed)
-        try:
-            frame = render_page_rgb565(page, layout, rotate_180=(rot == 180))
-        except Exception as exc:
-            print(f"[render] {exc}")
-            frame = None
-
         if _stats_active:
-            # Write stats overlay; page render above runs for realistic CPU load
             try:
                 sf = stats_mod.render_stats_rgb565(
-                    _stats_mon, W, H, font_path, rot == 180)
+                    _stats_mon, W, H, rot == 180)
                 _write_frame(sf, fb)
             except Exception as exc:
                 print(f"[stats] {exc}")
-            # Refresh every 2 s or immediately on dismiss/activate
             _stats_wake.wait(timeout=2)
             _stats_wake.clear()
-            # Do not advance page index while stats are shown
         else:
+            try:
+                frame = render_page_rgb565(page, layout, rotate_180=(rot == 180))
+            except Exception as exc:
+                print(f"[render] {exc}")
+                frame = None
             if frame:
                 _write_frame(frame, fb)
-            # Wait for navigation input or auto-advance on dwell timeout
             try:
                 delta = _nav_q.get(timeout=dwell)
                 idx = (idx + delta) % len(pages)
