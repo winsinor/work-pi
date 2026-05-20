@@ -149,7 +149,7 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     try:
         f_big  = ImageFont.load_default(size=22)
         f_info = ImageFont.load_default(size=13)
-        f_btn  = ImageFont.load_default(size=28)
+        f_btn  = ImageFont.load_default(size=44)
     except TypeError:  # Pillow < 10
         f_big = f_info = f_btn = ImageFont.load_default()
 
@@ -207,8 +207,17 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     py = int(H * POWEROFF_Y_FRAC)
     draw.line([(0, py - 2), (W, py - 2)], fill=(60, 60, 60))
     draw.rectangle([4, py + 2, W - 4, H - 4], fill=(120, 20, 20), outline=(220, 60, 60))
-    draw.text((W // 2, py + (H - py) // 2), "Power Off",
-              fill=(255, 200, 200), font=f_btn, anchor="mm")
+    try:
+        bb = draw.textbbox((0, 0), "Power Off", font=f_btn)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        top_offset = bb[1]
+    except AttributeError:  # Pillow < 8
+        tw, th, top_offset = len("Power Off") * 6, 11, 0
+    btn_top = py + 2
+    btn_h   = H - 4 - btn_top
+    tx = (W - tw) // 2
+    ty = btn_top + (btn_h - th) // 2 - top_offset
+    draw.text((tx, ty), "Power Off", fill=(255, 200, 200), font=f_btn)
 
     if rotate_180:
         img = img.rotate(180)
