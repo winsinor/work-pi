@@ -236,7 +236,7 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     btn_h   = H - 4 - btn_top
     tx = (W - tw) // 2
     ty = btn_top + (btn_h - th) // 2 - top_offset
-    draw.text((tx, ty), "Power Off", fill=(255, 200, 200), font=f_btn)
+    draw.text((tx, ty), "Hold to Power Off", fill=(255, 200, 200), font=f_btn)
 
     if rotate_180:
         img = img.rotate(180)

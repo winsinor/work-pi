@@ -69,7 +69,8 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - Activated by long-press center screen or short-press K2 (GPIO23)
 - Uses PIL bitmap font (`ImageFont.load_default(size=N)`) — no TrueType, no file I/O
 - Updates every ~2 seconds (`_stats_wake.wait(timeout=2)`)
-- Tap anywhere to dismiss; tap bottom ~41% to power off (`POWEROFF_Y_FRAC = 0.59`)
+- Tap anywhere to dismiss; long-press anywhere to power off
+- `POWEROFF_Y_FRAC = 0.59` controls where the button is drawn, not tap detection (power-off is long-press to avoid XPT2046 Y-axis inversion issues)
 - Layout constants in `stats.py` (`ROW_H`, `LBL_W`, etc.) are tuned for 320×240. If the display size changes, update them manually — the stats overlay is **not** auto-scaled.
 - **Do not use `anchor="rt"` with bitmap fonts** — it's silently ignored; use explicit `x = W - VAL_W + offset`
 

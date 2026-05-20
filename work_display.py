@@ -251,17 +251,16 @@ def main():
     def _on_tap(sx: int, sy: int) -> None:
         nonlocal _stats_active
         if _stats_active:
-            if sy >= int(H * stats_mod.POWEROFF_Y_FRAC):
-                _do_shutdown(cfg, layout)
-            else:
-                _stats_active = False
-                _stats_wake.set()
+            _stats_active = False
+            _stats_wake.set()
         else:
             _nav_q.put(+1 if sx >= W // 2 else -1)
 
     def _on_long_press(sx: int, sy: int) -> None:
         nonlocal _stats_active
-        if not _stats_active and W // 3 <= sx <= 2 * W // 3:
+        if _stats_active:
+            _do_shutdown(cfg, layout)
+        elif W // 3 <= sx <= 2 * W // 3:
             _stats_active = True
             _stats_wake.set()
 
