@@ -117,11 +117,12 @@ def start_touch(
                     press_t   = time.monotonic()
                     press_raw = [0, 0]
                     seen_x = seen_y = False
+                    print("[touch] press")
                 elif value == 0 and press_t is not None:   # release
                     dur   = time.monotonic() - press_t
                     press_t = None
                     if not (seen_x and seen_y):
-                        print(f"[touch] drop: no coords")
+                        print("[touch] drop: no coords")
                         continue
                     moved = (abs(cur_raw[0] - press_raw[0])
                              + abs(cur_raw[1] - press_raw[1]))
