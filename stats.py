@@ -15,6 +15,26 @@ except ImportError:
 # Taps at or below this Y-fraction trigger power-off
 POWEROFF_Y_FRAC = 0.59
 
+_TTF_PATHS = [
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+]
+
+
+def _truetype(size: int):
+    """Load a TTF font at the given size, falling back to PIL's default."""
+    for path in _TTF_PATHS:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            pass
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
+
 
 class StatsMonitor:
     """Background thread that samples system stats once per second."""
@@ -145,13 +165,12 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     img  = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Use PIL's built-in bitmap font — no TrueType, no file I/O
     try:
         f_big  = ImageFont.load_default(size=22)
         f_info = ImageFont.load_default(size=13)
-        f_btn  = ImageFont.load_default(size=44)
     except TypeError:  # Pillow < 10
-        f_big = f_info = f_btn = ImageFont.load_default()
+        f_big = f_info = ImageFont.load_default()
+    f_btn = _truetype(44)
 
     cpu    = d.get("cpu_pct", 0.0)
     ram_u  = d.get("ram_used",  0)
