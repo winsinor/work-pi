@@ -177,7 +177,7 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
         fw = max(0, int(bw * min(pct, 100) / 100))
         if fw:
             draw.rectangle([bx, y + 1, bx + fw, y + bh], fill=bar_c)
-        draw.text((W - 2, y), val_str, fill=val_c, font=fsm, anchor="rt")
+        draw.text((W - VAL_W + 2, y), val_str, fill=val_c, font=fsm)
 
     def text_row(y, label, val_str, val_c):
         draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
