@@ -429,7 +429,6 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
             }
             events.append(entry)
         events.sort(key=lambda e: e["start_iso"])
-        print(f"[ics] fetched {len(events)} events")
         return events
     except Exception as exc:
         print(f"[ics] fetch failed: {exc}")
@@ -528,7 +527,6 @@ def get_work_state(store: DataStore) -> tuple[str, object, str | None]:
             store.work_state.set(state)
             store.work_state._return_date = ret
             store.work_state._event_title = title
-            print(f"[work-state] {state}")
         except Exception as exc:
             print(f"[work-state] ICS scan failed: {exc}")
             store.work_state.fetched_at = time.time()  # back off
