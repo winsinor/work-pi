@@ -135,7 +135,7 @@ def start_touch(
     def _run():
         while True:
             try:
-                with open(device, "rb") as f:
+                with open(device, "rb", buffering=0) as f:
                     _loop(f)
             except Exception as exc:
                 print(f"[touch] {exc}")
