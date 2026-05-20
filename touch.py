@@ -84,10 +84,11 @@ def start_touch(
         return max(0, min(W - 1, x)), max(0, min(H - 1, y))
 
     def _loop(f):
-        press_t:    float | None    = None
-        press_raw:  tuple[int, int] = (0, 0)
-        cur_raw:    list[int]       = [0, 0]
-        got_coords = False  # first ABS received after BTN_TOUCH press
+        press_t:   float | None  = None
+        press_raw: list[int]     = [0, 0]
+        cur_raw:   list[int]     = [0, 0]
+        seen_x = False
+        seen_y = False
 
         while True:
             data = f.read(_SIZE)
@@ -98,25 +99,31 @@ def start_touch(
             if etype == EV_ABS:
                 if code in (ABS_X, ABS_MT_POSITION_X):
                     cur_raw[0] = value
+                    if press_t is not None:
+                        seen_x = True
                 elif code in (ABS_Y, ABS_MT_POSITION_Y):
                     cur_raw[1] = value
-                # XPT2046 sends ABS *after* BTN_TOUCH=1; capture first pair
-                if press_t is not None and not got_coords:
-                    press_raw  = (cur_raw[0], cur_raw[1])
-                    got_coords = True
+                    if press_t is not None:
+                        seen_y = True
+                # Lock in press position only once both axes updated after press
+                if press_t is not None and seen_x and seen_y and press_raw == [0, 0]:
+                    press_raw = list(cur_raw)
 
             elif etype == EV_KEY and code == BTN_TOUCH:
                 if value == 1:                              # press
-                    press_t    = time.monotonic()
-                    got_coords = False
+                    press_t   = time.monotonic()
+                    press_raw = [0, 0]
+                    seen_x = seen_y = False
                 elif value == 0 and press_t is not None:   # release
                     dur   = time.monotonic() - press_t
+                    press_t = None
+                    if not (seen_x and seen_y):
+                        continue  # never got valid coords
                     moved = (abs(cur_raw[0] - press_raw[0])
                              + abs(cur_raw[1] - press_raw[1]))
-                    press_t = None
-                    if not got_coords or moved > MAX_MOVE_RAW:
-                        continue  # no coords yet, or was a drag
-                    sx, sy = _scale(*press_raw)
+                    if moved > MAX_MOVE_RAW:
+                        continue  # was a drag
+                    sx, sy = _scale(press_raw[0], press_raw[1])
                     if dur >= LONG_PRESS_S:
                         on_long_press(sx, sy)
                     else:
