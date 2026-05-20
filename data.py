@@ -494,7 +494,13 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
         if dtstart is None:
             continue
         if isinstance(dtstart.dt, datetime):
-            continue
+            # Outlook exports all-day events as midnight-to-midnight datetimes
+            # instead of bare dates. Treat those as all-day; skip real timed events.
+            sv = dtstart.dt
+            if hasattr(sv, "tzinfo") and sv.tzinfo:
+                sv = sv.astimezone().replace(tzinfo=None)
+            if sv.hour != 0 or sv.minute != 0:
+                continue
         title = str(component.get("SUMMARY", "")).strip()
         if not title:
             continue
