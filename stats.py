@@ -167,23 +167,29 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     disk_c = (220, 200, 60)
     temp_c = (255, 80,  80)  if temp and temp > 70 else (200, 200, 200)
 
-    def row(y, label, val_str, val_c, pct=None, bar_c=None):
-        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
-        if pct is not None:
-            bx, bw, bh = 52, W - 100, 12
-            draw.rectangle([bx, y + 1, bx + bw, y + bh], fill=(30, 30, 30))
-            fw = max(0, int(bw * min(pct, 100) / 100))
-            if fw:
-                draw.rectangle([bx, y + 1, bx + fw, y + bh], fill=bar_c)
-        draw.text((W - 4, y), val_str, fill=val_c, font=fsm, anchor="rt")
+    LX = 36   # label column width
+    VAL_W = 52  # value column width on right
 
-    row(4,  "CPU",  f"{cpu:.0f}%",       cpu_c,  cpu,      cpu_c)
-    row(20, "RAM",  f"{ram_pct:.0f}%",   ram_c,  ram_pct,  ram_c)
-    row(36, "DISK", f"{disk_pct:.0f}%",  disk_c, disk_pct, disk_c)
-    row(52, "MEM",  f"{_fmt_bytes(ram_u)}/{_fmt_bytes(ram_t)}", (140, 140, 160))
-    row(68, "TEMP", f"{temp:.1f}C" if temp else "--",           temp_c)
-    row(84, "DOWN", f"{_fmt_bytes(d.get('rx_bps', 0))}/s",      (80, 180, 255))
-    row(100,"UP",   f"{_fmt_bytes(d.get('tx_bps', 0))}/s",      (80, 220, 100))
+    def bar_row(y, label, val_str, val_c, pct, bar_c):
+        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
+        bx, bw, bh = LX, W - LX - VAL_W - 4, 12
+        draw.rectangle([bx, y + 1, bx + bw, y + bh], fill=(30, 30, 30))
+        fw = max(0, int(bw * min(pct, 100) / 100))
+        if fw:
+            draw.rectangle([bx, y + 1, bx + fw, y + bh], fill=bar_c)
+        draw.text((W - 2, y), val_str, fill=val_c, font=fsm, anchor="rt")
+
+    def text_row(y, label, val_str, val_c):
+        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
+        draw.text((LX + 2, y), val_str, fill=val_c, font=fsm)
+
+    bar_row(4,  "CPU",  f"{cpu:.0f}%",      cpu_c,  cpu,      cpu_c)
+    bar_row(20, "RAM",  f"{ram_pct:.0f}%",  ram_c,  ram_pct,  ram_c)
+    bar_row(36, "DISK", f"{disk_pct:.0f}%", disk_c, disk_pct, disk_c)
+    text_row(52, "MEM",  f"{_fmt_bytes(ram_u)} / {_fmt_bytes(ram_t)}", (140, 140, 160))
+    text_row(68, "TEMP", f"{temp:.1f} C" if temp else "--",            temp_c)
+    text_row(84, "DOWN", f"{_fmt_bytes(d.get('rx_bps', 0))}/s",        (80, 180, 255))
+    text_row(100,"UP",   f"{_fmt_bytes(d.get('tx_bps', 0))}/s",        (80, 220, 100))
 
     # Power-off button
     py = int(H * POWEROFF_Y_FRAC)
