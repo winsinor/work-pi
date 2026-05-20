@@ -459,6 +459,17 @@
         <p class="hint">Default 8080. Change if another service uses this port. Requires restart.</p>
       </div>
     </div>
+    <div class="section">
+      <div class="section-title">Display Preview</div>
+      <div class="field">
+        <button class="btn btn-primary" id="btn-screenshot">Capture Screen</button>
+        <p class="hint">Shows exactly what is currently on the display.</p>
+      </div>
+      <div id="screenshot-wrap" style="display:none; margin-top:10px; text-align:center">
+        <img id="screenshot-img" style="max-width:100%; border:1px solid #444; border-radius:4px" alt="Display screenshot">
+        <p id="screenshot-ts" style="font-size:11px; color:#888; margin-top:4px"></p>
+      </div>
+    </div>
   </div>
 
   </div><!-- /panels-container -->
@@ -971,6 +982,29 @@ $('loc-search').addEventListener('keydown', e => {
   if (e.key === 'Enter') $('btn-geocode').click();
 });
 
+$('btn-screenshot').addEventListener('click', async () => {
+  const btn = $('btn-screenshot');
+  btn.disabled = true;
+  btn.textContent = 'Capturing…';
+  try {
+    const resp = await fetch('/api/screenshot');
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({error: resp.statusText}));
+      toast('Screenshot failed: ' + err.error, 'error');
+      return;
+    }
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    $('screenshot-img').src = url;
+    $('screenshot-ts').textContent = 'Captured at ' + new Date().toLocaleTimeString();
+    $('screenshot-wrap').style.display = 'block';
+  } catch (e) {
+    toast('Screenshot error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Capture Screen';
+  }
+});
 </script>
 </body>
 </html>

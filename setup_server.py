@@ -18,8 +18,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import config as cfg_module
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
-_SETUP_HTML       = os.path.join(_BASE, "setup", "index.html")
-_SCREENSHOT_HTML  = os.path.join(_BASE, "setup", "screenshot.html")
+_SETUP_HTML = os.path.join(_BASE, "setup", "index.html")
 _CUSTOM_IMAGES_DIR = os.path.join(_BASE, "custom_images")
 _ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp"}
 _EDITOR_DIR  = os.path.join(_BASE, "editor")
@@ -287,9 +286,6 @@ class SetupHandler(BaseHTTPRequestHandler):
 
         if path in ("/", "/setup"):
             self._send_html(_SETUP_HTML)
-
-        elif path == "/screenshot":
-            self._send_html(_SCREENSHOT_HTML)
 
         elif path == "/api/config":
             self._send_json(cfg_module.load())
