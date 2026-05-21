@@ -61,6 +61,7 @@ class StatsMonitor:
         disk_used, disk_t = self._disk()
         temp             = self._temp()
         rx, tx           = self._net_bytes()
+        uptime           = self._uptime()
         now              = time.monotonic()
 
         rx_rate = tx_rate = 0.0
@@ -82,6 +83,7 @@ class StatsMonitor:
                 "temp_c":     temp,
                 "rx_bps":     rx_rate,
                 "tx_bps":     tx_rate,
+                "uptime_s":   uptime,
             }
 
     def _cpu_pct(self) -> float:
@@ -125,6 +127,13 @@ class StatsMonitor:
         except Exception:
             return None
 
+    def _uptime(self) -> float:
+        try:
+            with open("/proc/uptime") as f:
+                return float(f.read().split()[0])
+        except Exception:
+            return 0.0
+
     def _net_bytes(self) -> tuple[int, int]:
         rx = tx = 0
         try:
@@ -145,6 +154,18 @@ class StatsMonitor:
     def get(self) -> dict:
         with self._lock:
             return dict(self._data)
+
+
+def _fmt_uptime(s: float) -> str:
+    s = int(s)
+    d, s = divmod(s, 86400)
+    h, s = divmod(s, 3600)
+    m    = s // 60
+    if d:
+        return f"{d}d {h}h {m}m"
+    if h:
+        return f"{h}h {m}m"
+    return f"{m}m"
 
 
 def _fmt_bytes(n: float) -> str:
@@ -221,6 +242,10 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
               fill=(80, 180, 255), font=f_info)
     draw.text((W // 2, y_net), f"UP {_fmt_bytes(d.get('tx_bps', 0))}/s",
               fill=(80, 220, 100), font=f_info)
+
+    y_up = y_net + 16
+    draw.text((4, y_up), f"UPTIME {_fmt_uptime(d.get('uptime_s', 0))}",
+              fill=(160, 160, 160), font=f_info)
 
     # Power-off button
     py = int(H * POWEROFF_Y_FRAC)
