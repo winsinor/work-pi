@@ -34,7 +34,8 @@ First-time setup is done through a web UI served by the Pi itself.
 9. [Layout customisation](#layout-customisation)
 10. [Configuration reference](#configuration-reference)
 11. [GPIO buttons](#gpio-buttons)
-12. [Getting your API key and calendar URL](#getting-your-api-key-and-calendar-url)
+12. [Touch navigation](#touch-navigation)
+13. [Getting your API key and calendar URL](#getting-your-api-key-and-calendar-url)
 13. [Troubleshooting](#troubleshooting)
     - [Display stays black](#display-stays-black)
     - [Image is upside down](#image-is-upside-down)
@@ -492,12 +493,12 @@ checks if the keyword appears *anywhere* in the title.
 
 | Setting | Default | Notes |
 |---|---|---|
-| Width / Height | 480 / 320 | Match your display's actual resolution |
+| Width / Height | 320 / 240 | Match your display's actual resolution |
 | Framebuffer device | `/dev/fb1` | Run `ls /dev/fb*` on the Pi to check. HDMI = `/dev/fb0`. |
 | Rotation | 0° | Set to 180° if the image appears upside-down |
 | Page dwell | 8s | How long each page stays on screen before cycling |
 | GPIO buttons | Enabled | Uncheck if no buttons are wired to the Pi |
-| Shutdown GPIO | 23 | Hold 5s to shut down safely |
+| Stats GPIO | 23 | Short press: toggle stats overlay |
 | Advance GPIO | 24 | Press to skip to the next page |
 | Font path | `/usr/share/fonts/truetype/freefont/FreeSansBold.ttf` | Installed by `fonts-freefont-ttf` |
 
@@ -614,14 +615,28 @@ State changes take effect on the next scan.
 **live** — edit the file and the next frame render uses the new values. No
 restart needed.
 
+The easiest way to edit the layout is through the **layout editor** at
+`http://<pi-ip>:8080/editor/work`. It lets you drag and adjust positions visually
+with a live preview.
+
+### Auto-scaling
+
+`work_layout.json` stores pixel coordinates at the canvas size it was originally
+designed at (480×320). At runtime, `render.py` automatically scales everything
+to your actual display resolution (`display.width` × `display.height` from
+`config.json`). **You do not need to edit `work_layout.json` coordinates to match
+your display resolution** — just set the correct width/height in the setup UI and
+the layout scales automatically.
+
 ### Canvas size
 
 ```json
 "canvas": {"width": 480, "height": 320}
 ```
 
-Change this to match your display's resolution. Also update `display.width`
-and `display.height` in the setup UI to match.
+This is the design canvas — the coordinate space the layout was drawn in.
+Do not change this to match your physical display. The auto-scaling logic uses
+this value to compute the correct scale factors at runtime.
 
 ### Per-page line positions
 
@@ -664,40 +679,13 @@ centre. Applies to the Forecast page weather icon.
 `height` is how many pixels the grid occupies at the bottom of the Forecast
 page. `columns` controls how many time slots are shown (up to 5).
 
-### Per-page dwell time
+### Page dwell time
 
-```json
-"pages": {
-  "clock":    {"enabled": true, "dwell_seconds": 8},
-  "forecast": {"enabled": true, "dwell_seconds": 10},
-  "calendar": {"enabled": true, "dwell_seconds": 12},
-  "commute":  {"enabled": true, "dwell_seconds": 10}
-}
-```
+Page dwell (how long each page is shown before cycling) is set in the **Display**
+tab of the setup UI as **Page dwell** (seconds), stored in `config.json` as
+`display.page_dwell_s`. All pages use the same dwell time.
 
-Set `"enabled": false` to permanently hide a page.
-
-### Resolution presets
-
-The default layout targets **480×320**. To adapt for other resolutions,
-scale all `x`, `y`, `h`, `radius`, `cx`, and grid size values by the
-appropriate factor:
-
-| Resolution | Scale x | Scale y | Scale fonts | Common display |
-|---|---|---|---|---|
-| 320×240 | ×0.67 | ×0.75 | ×0.71 | Generic 2.4"/2.8" ILI9341 HAT |
-| 480×320 | ×1.00 | ×1.00 | ×1.00 (default) | Waveshare 3.5" A/B/C, Adafruit PiTFT 3.5" |
-| 640×480 | ×1.33 | ×1.50 | ×1.41 | — |
-| 800×480 | ×1.67 | ×1.50 | ×1.58 | Pimoroni HyperPixel 4 |
-
-**Example `work_layout.json` canvas for 320×240** (generic 2.4"/2.8" display):
-
-```json
-"canvas": {"width": 320, "height": 240}
-```
-
-Apply the ×0.67 / ×0.75 / ×0.71 scale to all `x`, `y`, and `h` values in
-`line_positions`, and scale `radius`, `cx`, and grid sizes proportionally.
+The `dwell_seconds` values in `work_layout.json` are not used by the display loop.
 
 ---
 
@@ -727,8 +715,8 @@ See `config.example.json` for a fully annotated template.
 | `addresses.work` | `""` | Work full street address |
 | `addresses.waypoint` | `""` | Optional waypoint (adds second commute route) |
 | `api_keys.tomtom` | `""` | TomTom API key |
-| `display.width` | `480` | Display width in pixels |
-| `display.height` | `320` | Display height in pixels |
+| `display.width` | `320` | Display width in pixels |
+| `display.height` | `240` | Display height in pixels |
 | `display.framebuffer` | `/dev/fb1` | Framebuffer device path |
 | `display.rotation` | `0` | Screen rotation: 0, 90, 180, or 270 |
 | `display.page_dwell_s` | `8` | Default seconds per page |
@@ -766,7 +754,7 @@ Two physical buttons can be wired to GPIO pins on the Pi.
 | Button | BCM Pin | Physical Pin | Action |
 |---|---|---|---|
 | Advance | GPIO 24 | Pin 18 | Short press: next page |
-| Shutdown | GPIO 23 | Pin 16 | Hold 5 s: graceful shutdown |
+| Stats | GPIO 23 | Pin 16 | Short press: toggle stats overlay |
 
 ### Wiring
 
@@ -788,13 +776,43 @@ Edit the **Display → GPIO buttons** section in the setup UI, or set
 Set `"buttons": {"enabled": false}` in `config.json` (or uncheck in setup UI)
 to skip GPIO initialisation entirely. The display still cycles pages automatically.
 
-### Shutdown sequence
+### Stats overlay
 
-When the shutdown button is held for 5 seconds:
+Short-pressing GPIO 23 (K2) toggles a system stats overlay showing CPU, RAM,
+disk usage, temperature, and network throughput. Tap anywhere on the touch screen
+to dismiss it.
+
+### Shutdown
+
+Power off is triggered by a **long-press in the centre of the touch screen**
+while the stats overlay is visible. The display shows "Hold to Power Off" as
+a button in the stats overlay. The sequence:
+
 1. Display turns dark red
 2. "Safe to unplug" appears
 3. Display turns white
 4. `sudo shutdown -h now` is called
+
+> GPIO-based shutdown was removed to avoid Y-axis inversion issues with the
+> XPT2046 touch controller. Use the touch-based shutdown instead.
+
+---
+
+## Touch navigation
+
+If your display has an XPT2046 (or compatible) touch controller, touch input is
+detected automatically from `/dev/input/event*`.
+
+| Gesture | Action |
+|---|---|
+| **Tap right half** | Next page |
+| **Tap left half** | Previous page |
+| **Long-press centre** | Toggle stats overlay (when not in stats mode) |
+| **Tap anywhere** | Dismiss stats overlay (when in stats mode) |
+| **Long-press anywhere** | Power off (when stats overlay is visible) |
+
+Touch calibration defaults (`min_x=200, max_x=3900, min_y=200, max_y=3900`) can
+be adjusted in `config.json` under `"touch"` if taps register in the wrong position.
 
 ---
 

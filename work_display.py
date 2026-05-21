@@ -106,9 +106,10 @@ def _start_fetch_threads(store: DataStore):
         while True:
             try:
                 store.weather.set(fetch_weather(store))
+                time.sleep(cfg["weather"]["update_interval_s"])
             except Exception as exc:
                 print(f"[weather] {exc}")
-            time.sleep(cfg["weather"]["update_interval_s"])
+                time.sleep(30)
 
     def _commute_loop():
         from data import fetch_commute, in_commute_window
@@ -118,16 +119,20 @@ def _start_fetch_threads(store: DataStore):
                     store.commute.set(fetch_commute(store))
                 except Exception as exc:
                     print(f"[commute] {exc}")
+                    time.sleep(30)
+                    continue
             time.sleep(cfg["commute"]["update_interval_s"])
 
     def _calendar_loop():
         from data import fetch_ics_events, fetch_work_state
         interval = cfg["calendar"]["update_interval_s"]
         while True:
+            ok = True
             try:
                 store.ics_events.set(fetch_ics_events(store))
             except Exception as exc:
                 print(f"[calendar] {exc}")
+                ok = False
             try:
                 state, ret, title = fetch_work_state(store)
                 store.work_state.set(state)
@@ -136,25 +141,28 @@ def _start_fetch_threads(store: DataStore):
                 store.work_state.fetched_at = time.time()
             except Exception as exc:
                 print(f"[work-state] {exc}")
-            time.sleep(interval)
+                ok = False
+            time.sleep(interval if ok else 30)
 
     def _aqi_loop():
         from data import fetch_aqi
         while True:
             try:
                 store.aqi.set(fetch_aqi(store))
+                time.sleep(cfg["aqi"]["update_interval_s"])
             except Exception as exc:
                 print(f"[aqi] {exc}")
-            time.sleep(cfg["aqi"]["update_interval_s"])
+                time.sleep(30)
 
     def _alerts_loop():
         from data import fetch_alerts
         while True:
             try:
                 store.alerts.set(fetch_alerts(store))
+                time.sleep(cfg["alerts"]["update_interval_s"])
             except Exception as exc:
                 print(f"[alerts] {exc}")
-            time.sleep(cfg["alerts"]["update_interval_s"])
+                time.sleep(30)
 
     for fn in (_weather_loop, _commute_loop, _calendar_loop,
                _aqi_loop, _alerts_loop):
