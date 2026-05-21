@@ -25,6 +25,27 @@
   on every main-loop iteration even when the file hasn't changed. Return a shared
   reference instead — callers don't mutate the layout dict during rendering.
 
+## Features
+
+- **Brightness control via GPIO buttons**: map K1/K2/K3 physical buttons to
+  dim/medium/bright backlight levels. Needs either a PWM-capable GPIO pin wired
+  to the display's backlight, or framebuffer gamma adjustment as a fallback.
+
+- **Stale-data indicator**: show a subtle visual warning (dim border, faded clock,
+  or "!" badge) when the last successful data fetch is older than 2× the poll
+  interval. Track `last_fetched_at` per data source in `DataStore`; check on each
+  render cycle in `pages.py`.
+
+- **Weather alert banner**: `fetch_alerts()` already runs and the result is shown
+  as a small red text line on the weather page (`pages.py:74–75`). Enhance to a
+  full-width colored banner (red/orange background strip) so active NWS alerts are
+  more visually prominent.
+
+- **Color palette toggle**: add a `color_palette` config key (`"dark"` / `"light"`)
+  for a white-background, dark-text mode. Define palettes as a dict in `render.py`;
+  expose toggle in the setup UI and `config.json`. All color references in
+  `render_page_pil` would read from the active palette.
+
 ## Main loop
 
 - **`glob.glob` every iteration** (`work_display.py:317`): scans the `custom_images/`
