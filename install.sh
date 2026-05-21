@@ -98,11 +98,25 @@ done
 
 # shellcheck disable=SC2086
 $PYTHON -m pip install --upgrade pip --quiet
-pip_packages=(requests icalendar "recurring-ical-events>=2.0" gpiozero RPi.GPIO)
-for pkg in "${pip_packages[@]}"; do
-    # shellcheck disable=SC2086
+
+# Helper: try pip install normally, fall back to HTTP index on SSL failure
+pip_install() {
+    local pkg="$1"
+    $PYTHON -m pip install $PIP_EXTRA "$pkg" --quiet && return 0
+    info "    Retrying $pkg via HTTP (piwheels SSL issue) …"
     $PYTHON -m pip install $PIP_EXTRA "$pkg" --quiet \
-        || { red "    FAILED to install $pkg — run:  pip3 install $pkg"; }
+        --index-url http://pypi.org/simple/ \
+        --trusted-host pypi.org \
+        --trusted-host files.pythonhosted.org \
+        && return 0
+    red "    FAILED to install $pkg — run:  pip3 install \"$pkg\""
+}
+
+# icalendar>=6.1.0 required by recurring-ical-events 3.x
+# (Raspberry Pi OS ships icalendar 4.x via apt — too old)
+pip_packages=(requests "icalendar>=6.1.0" "recurring-ical-events>=2.0" gpiozero RPi.GPIO)
+for pkg in "${pip_packages[@]}"; do
+    pip_install "$pkg"
 done
 
 # cairosvg is optional — SVG icon rendering; skip on low-mem devices

@@ -117,22 +117,26 @@ def start_touch(
                     press_t   = time.monotonic()
                     press_raw = [0, 0]
                     seen_x = seen_y = False
-                    print("[touch] press")
+                    if debug:
+                        print("[touch] press")
                 elif value == 0 and press_t is not None:   # release
                     dur   = time.monotonic() - press_t
                     press_t = None
                     if not (seen_x and seen_y):
-                        print("[touch] drop: no coords")
+                        if debug:
+                            print("[touch] drop: no coords")
                         continue
                     moved = (abs(cur_raw[0] - press_raw[0])
                              + abs(cur_raw[1] - press_raw[1]))
                     if debug:
                         print(f"[touch] release: press={press_raw} cur={cur_raw} moved={moved} dur={dur:.2f}s")
                     if moved > MAX_MOVE_RAW:
-                        print(f"[touch] drop: drag (moved={moved})")
+                        if debug:
+                            print(f"[touch] drop: drag (moved={moved})")
                         continue
                     sx, sy = _scale(press_raw[0], press_raw[1])
-                    print(f"[touch] {'long-press' if dur >= LONG_PRESS_S else 'tap'} sx={sx} sy={sy}")
+                    if debug:
+                        print(f"[touch] {'long-press' if dur >= LONG_PRESS_S else 'tap'} sx={sx} sy={sy}")
                     if dur >= LONG_PRESS_S:
                         on_long_press(sx, sy)
                     else:

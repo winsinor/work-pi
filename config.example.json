@@ -17,8 +17,8 @@
     "tomtom": "YOUR_TOMTOM_API_KEY"
   },
   "display": {
-    "width":        480,
-    "height":       320,
+    "width":        320,
+    "height":       240,
     "framebuffer":  "/dev/fb1",
     "rotation":     0,
     "page_dwell_s": 8

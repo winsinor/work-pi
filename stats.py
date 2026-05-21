@@ -13,7 +13,27 @@ except ImportError:
     _PIL_OK = False
 
 # Taps at or below this Y-fraction trigger power-off
-POWEROFF_Y_FRAC = 0.68
+POWEROFF_Y_FRAC = 0.59
+
+_TTF_PATHS = [
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+]
+
+
+def _truetype(size: int):
+    """Load a TTF font at the given size, falling back to PIL's default."""
+    for path in _TTF_PATHS:
+        try:
+            return ImageFont.truetype(path, size)
+        except Exception:
+            pass
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 class StatsMonitor:
@@ -145,13 +165,12 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     img  = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Use PIL's built-in bitmap font — no TrueType, no file I/O
     try:
-        font = ImageFont.load_default(size=16)
-        fsm  = ImageFont.load_default(size=13)
+        f_big  = ImageFont.load_default(size=22)
+        f_info = ImageFont.load_default(size=13)
     except TypeError:  # Pillow < 10
-        font = ImageFont.load_default()
-        fsm  = font
+        f_big = f_info = ImageFont.load_default()
+    f_btn = _truetype(44)
 
     cpu    = d.get("cpu_pct", 0.0)
     ram_u  = d.get("ram_used",  0)
@@ -167,36 +186,57 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     disk_c = (220, 200, 60)
     temp_c = (255, 80,  80)  if temp and temp > 70 else (200, 200, 200)
 
-    LX = 36   # label column width
-    VAL_W = 52  # value column width on right
+    ROW_H = 26   # height of each bar row
+    LBL_W = 54   # label column width
+    VAL_W = 60   # value column width on right
+    BAR_H = 12   # progress bar height
+    GAP   = 3    # gap between rows
 
     def bar_row(y, label, val_str, val_c, pct, bar_c):
-        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
-        bx, bw, bh = LX, W - LX - VAL_W - 4, 12
-        draw.rectangle([bx, y + 1, bx + bw, y + bh], fill=(30, 30, 30))
+        ty = y + (ROW_H - 22) // 2
+        draw.text((4, ty), label, fill=(160, 160, 160), font=f_big)
+        bx = LBL_W
+        bw = W - LBL_W - VAL_W - 6
+        by = y + (ROW_H - BAR_H) // 2
+        draw.rectangle([bx, by, bx + bw, by + BAR_H], fill=(30, 30, 30))
         fw = max(0, int(bw * min(pct, 100) / 100))
         if fw:
-            draw.rectangle([bx, y + 1, bx + fw, y + bh], fill=bar_c)
-        draw.text((W - VAL_W + 2, y), val_str, fill=val_c, font=fsm)
+            draw.rectangle([bx, by, bx + fw, by + BAR_H], fill=bar_c)
+        draw.text((W - VAL_W + 4, ty), val_str, fill=val_c, font=f_big)
 
-    def text_row(y, label, val_str, val_c):
-        draw.text((4, y), label, fill=(160, 160, 160), font=fsm)
-        draw.text((LX + 2, y), val_str, fill=val_c, font=fsm)
+    y0 = 6
+    bar_row(y0,                   "CPU",  f"{cpu:.0f}%",      cpu_c,  cpu,      cpu_c)
+    bar_row(y0 + ROW_H + GAP,     "RAM",  f"{ram_pct:.0f}%",  ram_c,  ram_pct,  ram_c)
+    bar_row(y0 + 2 * (ROW_H+GAP), "DISK", f"{disk_pct:.0f}%", disk_c, disk_pct, disk_c)
 
-    bar_row(4,  "CPU",  f"{cpu:.0f}%",      cpu_c,  cpu,      cpu_c)
-    bar_row(20, "RAM",  f"{ram_pct:.0f}%",  ram_c,  ram_pct,  ram_c)
-    bar_row(36, "DISK", f"{disk_pct:.0f}%", disk_c, disk_pct, disk_c)
-    text_row(52, "MEM",  f"{_fmt_bytes(ram_u)} / {_fmt_bytes(ram_t)}", (140, 140, 160))
-    text_row(68, "TEMP", f"{temp:.1f} C" if temp else "--",            temp_c)
-    text_row(84, "DOWN", f"{_fmt_bytes(d.get('rx_bps', 0))}/s",        (80, 180, 255))
-    text_row(100,"UP",   f"{_fmt_bytes(d.get('tx_bps', 0))}/s",        (80, 220, 100))
+    # Secondary info — two compact rows, each split left/right
+    y_info = y0 + 3 * (ROW_H + GAP) + 6
+    draw.text((4,      y_info), f"TEMP {temp:.1f} C" if temp else "TEMP --",
+              fill=temp_c, font=f_info)
+    draw.text((W // 2, y_info), f"MEM {_fmt_bytes(ram_u)} / {_fmt_bytes(ram_t)}",
+              fill=(140, 140, 160), font=f_info)
+
+    y_net = y_info + 16
+    draw.text((4,      y_net), f"DOWN {_fmt_bytes(d.get('rx_bps', 0))}/s",
+              fill=(80, 180, 255), font=f_info)
+    draw.text((W // 2, y_net), f"UP {_fmt_bytes(d.get('tx_bps', 0))}/s",
+              fill=(80, 220, 100), font=f_info)
 
     # Power-off button
     py = int(H * POWEROFF_Y_FRAC)
     draw.line([(0, py - 2), (W, py - 2)], fill=(60, 60, 60))
     draw.rectangle([4, py + 2, W - 4, H - 4], fill=(120, 20, 20), outline=(220, 60, 60))
-    draw.text((W // 2, py + (H - py) // 2), "Power Off",
-              fill=(255, 200, 200), font=font, anchor="mm")
+    try:
+        bb = draw.textbbox((0, 0), "Power Off", font=f_btn)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        top_offset = bb[1]
+    except AttributeError:  # Pillow < 8
+        tw, th, top_offset = len("Power Off") * 6, 11, 0
+    btn_top = py + 2
+    btn_h   = H - 4 - btn_top
+    tx = (W - tw) // 2
+    ty = btn_top + (btn_h - th) // 2 - top_offset
+    draw.text((tx, ty), "Hold to Power Off", fill=(255, 200, 200), font=f_btn)
 
     if rotate_180:
         img = img.rotate(180)

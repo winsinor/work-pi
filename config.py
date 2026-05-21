@@ -27,8 +27,8 @@ DEFAULTS: dict = {
         "tomtom": "",
     },
     "display": {
-        "width": 480,
-        "height": 320,
+        "width": 320,
+        "height": 240,
         "framebuffer": "/dev/fb1",
         "rotation": 0,          # degrees: 0, 90, 180, or 270
         "page_dwell_s": 8,      # default seconds per page

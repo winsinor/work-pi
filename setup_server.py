@@ -347,6 +347,38 @@ class SetupHandler(BaseHTTPRequestHandler):
             rel = path[len("/icons/"):]
             self._send_file(os.path.join(_ICONS_DIR, rel))
 
+        elif path == "/api/screenshot":
+            try:
+                cfg = cfg_module.load()
+                fb_path = cfg["display"]["framebuffer"]
+                W = cfg["display"]["width"]
+                H = cfg["display"]["height"]
+                with open(fb_path, "rb") as f:
+                    raw = f.read(W * H * 2)
+                from PIL import Image
+                img = Image.new("RGB", (W, H))
+                pixels = []
+                for i in range(W * H):
+                    lo = raw[i * 2]
+                    hi = raw[i * 2 + 1]
+                    p = lo | (hi << 8)
+                    r = (p >> 8) & 0xF8
+                    g = (p >> 3) & 0xFC
+                    b = (p << 3) & 0xF8
+                    pixels.append((r, g, b))
+                img.putdata(pixels)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                png = buf.getvalue()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(png)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(png)
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, 500)
+
         elif path == "/work/layout":
             from render import LAYOUT_DEFAULTS
             try:
