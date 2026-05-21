@@ -446,19 +446,34 @@ def get_ics_events(store: DataStore) -> list[dict]:
 
 # ── Work state (WFH / OOO / HOLIDAY / NORMAL) ───────────────────────────────────────
 
-def _advance_to_workday(cal, d) -> object:
+def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
+                        holiday_kw: list[str] | None = None) -> object:
+    ooo_kw     = ooo_kw     or []
+    holiday_kw = holiday_kw or ["holiday"]
     for _ in range(14):
         if d.weekday() >= 5:
             d += timedelta(days=1)
             continue
         s = datetime.combine(d, datetime.min.time())
         e = datetime.combine(d + timedelta(days=1), datetime.min.time())
-        is_holiday = any(
-            "holiday" in str(comp.get("SUMMARY", "")).lower()
-            for comp in recurring_ical_events.of(cal).between(s, e)
-            if comp.get("DTSTART") and not isinstance(comp.get("DTSTART").dt, datetime)
-        )
-        if is_holiday:
+        day_events = recurring_ical_events.of(cal).between(s, e)
+        skip = False
+        for comp in day_events:
+            dtstart = comp.get("DTSTART")
+            if dtstart is None:
+                continue
+            # Only consider all-day events (bare date or midnight datetime)
+            if isinstance(dtstart.dt, datetime):
+                sv = dtstart.dt
+                if hasattr(sv, "tzinfo") and sv.tzinfo:
+                    sv = sv.astimezone().replace(tzinfo=None)
+                if sv.hour != 0 or sv.minute != 0:
+                    continue
+            title = str(comp.get("SUMMARY", "")).lower()
+            if any(k in title for k in ooo_kw) or any(k in title for k in holiday_kw):
+                skip = True
+                break
+        if skip:
             d += timedelta(days=1)
         else:
             break
@@ -515,7 +530,7 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
             if isinstance(ev, datetime):
                 ev = ev.date()
             new_state  = "OOO"
-            new_return = _advance_to_workday(cal, ev)
+            new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw)
             break
         if any(k in tl for k in holiday_kw):
             new_state = "HOLIDAY"
