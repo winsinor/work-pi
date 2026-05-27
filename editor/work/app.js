@@ -121,13 +121,12 @@ function nudge(dir) {
     _lockAutoLines(_activeElem.pageName);
   }
 
-  const canvas = (state.layout && state.layout.canvas) || {};
-  const maxV = isX ? ((canvas.width  || 480) - 1) : ((canvas.height || 320) - 1);
+  const maxV = isX ? 319 : 239;
   let cur;
   if (inp.value !== "") {
     cur = parseFloat(inp.value);
   } else if (isX) {
-    cur = (canvas.width || 480) / 2; // center of canvas
+    cur = 160; // center of 320px canvas
   } else {
     // Compute exact auto-Y for this specific line
     const ys = _computeAllAutoYs(_activeElem.pageName);
