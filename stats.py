@@ -12,6 +12,8 @@ try:
 except ImportError:
     _PIL_OK = False
 
+from render import _img_to_rgb565
+
 # Taps at or below this Y-fraction trigger power-off
 POWEROFF_Y_FRAC = 0.59
 
@@ -34,6 +36,24 @@ def _truetype(size: int):
         return ImageFont.load_default(size=size)
     except TypeError:
         return ImageFont.load_default()
+
+
+# Fonts loaded once on first render, then reused (not recreated every ~2s)
+_stats_f_big:  object = None
+_stats_f_info: object = None
+_stats_f_btn:  object = None
+
+
+def _ensure_stats_fonts() -> None:
+    global _stats_f_big, _stats_f_info, _stats_f_btn
+    if _stats_f_big is not None:
+        return
+    try:
+        _stats_f_big  = ImageFont.load_default(size=22)
+        _stats_f_info = ImageFont.load_default(size=13)
+    except TypeError:  # Pillow < 10
+        _stats_f_big = _stats_f_info = ImageFont.load_default()
+    _stats_f_btn = _truetype(44)
 
 
 class StatsMonitor:
@@ -186,12 +206,8 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     img  = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    try:
-        f_big  = ImageFont.load_default(size=22)
-        f_info = ImageFont.load_default(size=13)
-    except TypeError:  # Pillow < 10
-        f_big = f_info = ImageFont.load_default()
-    f_btn = _truetype(44)
+    _ensure_stats_fonts()
+    f_big, f_info, f_btn = _stats_f_big, _stats_f_info, _stats_f_btn
 
     cpu    = d.get("cpu_pct", 0.0)
     ram_u  = d.get("ram_used",  0)
@@ -266,11 +282,4 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     if rotate_180:
         img = img.rotate(180)
 
-    raw = img.tobytes()  # RGBRGB...
-    buf = bytearray(W * H * 2)
-    for i in range(W * H):
-        r, g, b = raw[i*3], raw[i*3+1], raw[i*3+2]
-        p = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-        buf[i*2]   = p & 0xFF
-        buf[i*2+1] = p >> 8
-    return bytes(buf)
+    return _img_to_rgb565(img)

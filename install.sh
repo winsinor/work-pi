@@ -50,6 +50,11 @@ apt-get install -y --no-install-recommends libtiff6 2>/dev/null \
     || apt-get install -y --no-install-recommends libtiff5 2>/dev/null \
     || info "    libtiff not found — Pillow may still work via its own bundled libs"
 
+# numpy — optional; used for ~5-10x faster RGB565 conversion on ARMv6.
+# Skip on very low memory systems (Pi Zero etc.) if install fails.
+apt-get install -y --no-install-recommends python3-numpy 2>/dev/null \
+    || info "    python3-numpy not available — RGB565 conversion will use pure Python fallback"
+
 # cairosvg system dep (for weather icons — optional; degrades gracefully without)
 apt-get install -y --no-install-recommends \
     libcairo2 libcairo2-dev libgdk-pixbuf2.0-0 libffi-dev \
