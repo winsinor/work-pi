@@ -156,8 +156,12 @@ _DEMO_PAGES: dict = {
         "_name": "calendar_empty",
         "title": "Calendar",
         "lines": [
-            {"text": "No upcoming",  "size": 1, "color": "darkgrey"},
-            {"text": "events today", "size": 1, "color": "darkgrey"},
+            {"text": "No upcoming",             "size": 1, "color": "darkgrey"},
+            {"text": "events today",            "size": 1, "color": "darkgrey"},
+            {"text": "Next: Electrical Meeting","color": "white", "wrap_left": True},
+            {"text": "Mon. 9:00 - 10:00 AM",   "size": 1, "color": "grey"},
+            {"text": "Then: Team Standup",      "color": "grey",  "wrap_left": True},
+            {"text": "Tue. 8:30 - 8:45 AM",    "size": 1, "color": "grey"},
         ],
     },
     "commute": {
