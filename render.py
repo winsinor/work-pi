@@ -272,6 +272,24 @@ _STATIC_ICON_MAP: dict[str, str] = {
 _static_icon_cache: dict = {}
 
 
+def _center_icon(img_rgba: "Image.Image", target: int) -> "Image.Image":
+    """Crop to the content bounding box, re-center in a square, resize to target×target.
+
+    Each source PNG has different amounts of transparent padding, making the visual
+    center land at different pixel offsets. This normalises all icons to a consistent
+    centered square before they are pasted onto the display.
+    """
+    # Use the alpha channel bbox so transparent-but-coloured pixels don't count
+    alpha_bbox = img_rgba.split()[3].getbbox()
+    if alpha_bbox:
+        img_rgba = img_rgba.crop(alpha_bbox)
+    cw, ch = img_rgba.size
+    sq = max(cw, ch)
+    square = Image.new("RGBA", (sq, sq), (0, 0, 0, 0))
+    square.paste(img_rgba, ((sq - cw) // 2, (sq - ch) // 2))
+    return square.resize((target, target), Image.LANCZOS)
+
+
 def _load_static_icon(name: str, r: int):
     if not _PIL_AVAILABLE:
         return None
@@ -287,7 +305,7 @@ def _load_static_icon(name: str, r: int):
     png_path = os.path.join(_ICONS_DIR, png_filename)
     if os.path.exists(png_path):
         try:
-            img = Image.open(png_path).convert("RGBA").resize((r * 2, r * 2), Image.LANCZOS)
+            img = _center_icon(Image.open(png_path).convert("RGBA"), r * 2)
             _static_icon_cache[cache_key] = img
             return img
         except Exception as exc:
@@ -303,7 +321,7 @@ def _load_static_icon(name: str, r: int):
         return None
     try:
         png = cairosvg.svg2png(url=svg_path, output_width=r * 2)
-        img = Image.open(io.BytesIO(png)).convert("RGBA")
+        img = _center_icon(Image.open(io.BytesIO(png)).convert("RGBA"), r * 2)
         _static_icon_cache[cache_key] = img
         return img
     except Exception as exc:
