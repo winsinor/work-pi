@@ -125,6 +125,7 @@
     <div class="tab" data-tab="calendar">Calendar</div>
     <div class="tab" data-tab="custom-images">Custom Images</div>
     <div class="tab" data-tab="keywords">Keywords</div>
+    <div class="tab" data-tab="spotify">Spotify</div>
     <div class="tab" data-tab="display">Display</div>
     <div class="tab" data-tab="intervals">Intervals</div>
   </div>
@@ -315,6 +316,42 @@
         <div class="tags-wrap" id="tags-holiday"></div>
         <p class="hint">e.g. <em>holiday</em></p>
       </div>
+    </div>
+  </div>
+
+  <!-- ── Spotify ── -->
+  <div class="panel" id="panel-spotify">
+    <div class="section">
+      <div class="section-title">
+        Spotify — Now Playing
+        <span id="spotify-badge" class="badge badge-yellow">Checking…</span>
+      </div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:12px">
+        Shows the currently playing track while music is playing. Requires a free Spotify developer app.
+      </p>
+      <ol style="color:var(--muted);font-size:13px;padding-left:20px;line-height:1.8">
+        <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:var(--accent)">developer.spotify.com/dashboard</a> and create an app.</li>
+        <li>In the app settings, add this exact Redirect URI: <code id="spotify-redirect-uri" style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px">loading…</code></li>
+        <li>Copy your Client ID and Client Secret below, then click <strong>Save</strong>.</li>
+        <li>Click <strong>Connect Spotify</strong> to authorize.</li>
+      </ol>
+    </div>
+    <div class="section">
+      <div class="section-title">Credentials</div>
+      <div class="field">
+        <label>Client ID</label>
+        <input type="text" id="spotify-client-id" placeholder="Paste your Spotify client ID">
+      </div>
+      <div class="field">
+        <label>Client Secret</label>
+        <input type="password" id="spotify-client-secret" placeholder="Paste your Spotify client secret">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button class="btn btn-primary" id="btn-spotify-save">Save</button>
+        <button class="btn" id="btn-spotify-connect" disabled>Connect Spotify</button>
+        <button class="btn" id="btn-spotify-disconnect" style="display:none;color:var(--red)">Disconnect</button>
+      </div>
+      <p id="spotify-connect-hint" style="font-size:12px;color:var(--muted);margin-top:8px"></p>
     </div>
   </div>
 
@@ -708,6 +745,9 @@ function populateForm(cfg) {
   $('commute-weekdays').checked = cfg.commute?.weekdays_only !== false;
 
   $('setup-port').value = cfg.setup_port || 8080;
+
+  $('spotify-client-id').value     = cfg.spotify?.client_id     || '';
+  $('spotify-client-secret').value = cfg.spotify?.client_secret || '';
 }
 
 function updateStatus(cfg) {
@@ -1018,6 +1058,113 @@ $('btn-screenshot').addEventListener('click', async () => {
     btn.textContent = 'Capture Screen';
   }
 });
+
+// ── Spotify ────────────────────────────────────────────────────────────────────
+async function loadSpotifyStatus() {
+  try {
+    const r = await fetch('/api/spotify/status');
+    const d = await r.json();
+    const badge = $('spotify-badge');
+    const connectBtn = $('btn-spotify-connect');
+    const disconnectBtn = $('btn-spotify-disconnect');
+    if (d.connected) {
+      badge.textContent = 'Connected ✓';
+      badge.className = 'badge badge-green';
+      connectBtn.textContent = 'Re-connect Spotify';
+      disconnectBtn.style.display = '';
+    } else {
+      badge.textContent = 'Not connected';
+      badge.className = 'badge badge-yellow';
+      connectBtn.textContent = 'Connect Spotify';
+      disconnectBtn.style.display = 'none';
+    }
+    connectBtn.disabled = !d.has_credentials;
+    if (!d.has_credentials) {
+      $('spotify-connect-hint').textContent = 'Save your Client ID and Client Secret first.';
+    } else {
+      $('spotify-connect-hint').textContent = '';
+    }
+  } catch(e) {}
+}
+
+async function loadSpotifyRedirectUri() {
+  try {
+    const r = await fetch('/api/local_ip');
+    const d = await r.json();
+    const port = _cfg?.setup_port || 8080;
+    $('spotify-redirect-uri').textContent = `http://${d.ip}:${port}/spotify/callback`;
+  } catch(e) {}
+}
+
+$('btn-spotify-save').addEventListener('click', async () => {
+  const clientId     = $('spotify-client-id').value.trim();
+  const clientSecret = $('spotify-client-secret').value.trim();
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({spotify: {client_id: clientId, client_secret: clientSecret}}),
+    });
+    const d = await r.json();
+    if (d.status === 'saved') {
+      toast('Spotify credentials saved ✓');
+      await loadSpotifyStatus();
+    } else {
+      toast(d.error || 'Save failed', 'error');
+    }
+  } catch(e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+});
+
+$('btn-spotify-connect').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/spotify/auth-url');
+    const d = await r.json();
+    if (d.error) { toast(d.error, 'error'); return; }
+    const win = window.open(d.auth_url, '_blank');
+    $('spotify-connect-hint').textContent = 'Complete authorization in the new tab, then come back here.';
+    // Poll for completion
+    const poll = setInterval(async () => {
+      const s = await fetch('/api/spotify/status').then(r=>r.json()).catch(()=>null);
+      if (s?.connected) {
+        clearInterval(poll);
+        $('spotify-connect-hint').textContent = '';
+        await loadSpotifyStatus();
+        toast('Spotify connected ✓');
+      }
+    }, 2000);
+    setTimeout(() => clearInterval(poll), 120000);
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+});
+
+$('btn-spotify-disconnect').addEventListener('click', async () => {
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({spotify: {refresh_token: ''}}),
+    });
+    const d = await r.json();
+    if (d.status === 'saved') {
+      toast('Spotify disconnected');
+      await loadSpotifyStatus();
+    }
+  } catch(e) {
+    toast('Error: ' + e.message, 'error');
+  }
+});
+
+// Load Spotify status when its tab is first opened
+document.querySelectorAll('.tab[data-tab="spotify"]').forEach(tab => {
+  tab.addEventListener('click', () => {
+    loadSpotifyStatus();
+    loadSpotifyRedirectUri();
+  });
+});
+
 </script>
 </body>
 </html>

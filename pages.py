@@ -9,7 +9,7 @@ from data import (
     DataStore,
     WMO_DESC, WMO_ICONS,
     get_weather, get_aqi, get_alerts, get_commute,
-    get_ics_events, get_work_state,
+    get_ics_events, get_work_state, get_spotify,
     in_commute_window, later_today_desc, wind_cardinal,
     local_now,
 )
@@ -293,6 +293,20 @@ def build_shutdown_page() -> dict:
 
 # ── Top-level display assembler ──────────────────────────────────────────────
 
+def build_spotify_page(store: DataStore) -> dict | None:
+    sp = get_spotify(store)
+    if not sp:
+        return None
+    return {
+        "_name":   "spotify",
+        "title":   "Now Playing",
+        "track":   sp.get("track", ""),
+        "artist":  sp.get("artist", ""),
+        "album":   sp.get("album", ""),
+        "art_url": sp.get("art_url"),
+    }
+
+
 def build_display(store: DataStore) -> dict:
     state, return_date, event_title = get_work_state(store)
 
@@ -317,7 +331,7 @@ def build_display(store: DataStore) -> dict:
 
     tz = store.cfg.get("location", {}).get("timezone")
     pages = [build_clock_page(tz)]
-    for fn in (build_calendar_page, build_weather_page, build_commute_page):
+    for fn in (build_spotify_page, build_calendar_page, build_weather_page, build_commute_page):
         try:
             page = fn(store)
             if page:

@@ -7,6 +7,12 @@ import math
 import os
 
 try:
+    import requests as _requests
+    _REQUESTS_OK = True
+except ImportError:
+    _REQUESTS_OK = False
+
+try:
     from PIL import Image, ImageDraw, ImageFont, ImageOps
     _PIL_AVAILABLE = True
 except ImportError:
@@ -504,11 +510,110 @@ def render_custom_image_page(image_path: str, layout: dict) -> "Image.Image":
     return _custom_image_cache[key]
 
 
+# ── Spotify renderer ─────────────────────────────────────────────────────────────────
+
+_spotify_art_cache: dict = {}  # url → PIL Image (resized)
+
+
+def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
+    if (url, size) in _spotify_art_cache:
+        return _spotify_art_cache[(url, size)]
+    if not _REQUESTS_OK:
+        return None
+    try:
+        r = _requests.get(url, timeout=6)
+        r.raise_for_status()
+        img = Image.open(io.BytesIO(r.content)).convert("RGB")
+        img = ImageOps.fit(img, (size, size), Image.LANCZOS)
+        if len(_spotify_art_cache) >= 30:
+            _spotify_art_cache.clear()
+        _spotify_art_cache[(url, size)] = img
+        return img
+    except Exception:
+        return None
+
+
+def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
+    W   = layout["canvas"]["width"]
+    H   = layout["canvas"]["height"]
+    hh  = layout["header"]["height"]
+    img  = Image.new("RGB", (W, H), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    if hh > 0:
+        draw.rectangle([0, 0, W, hh], fill=tuple(layout["header"]["bg"]))
+        title_f = _get_font(20, layout)
+        title   = page.get("title", "Now Playing")
+        tw, th  = _text_size(draw, title, title_f)
+        draw.text(((W - tw) // 2, (hh - th) // 2), title,
+                  font=title_f, fill=_pil_color(layout["header"]["title_color"]))
+        draw.line([(0, hh), (W, hh)], fill=(60, 60, 60), width=1)
+
+    content_y0 = hh + 4
+    content_h  = H - content_y0 - 4
+
+    ART_PAD  = 8
+    ART_SIZE = min(content_h - ART_PAD * 2, 110)
+    art_x    = ART_PAD
+    art_y    = content_y0 + (content_h - ART_SIZE) // 2
+
+    art_url = page.get("art_url")
+    if art_url:
+        art_img = _fetch_album_art(art_url, ART_SIZE)
+        if art_img:
+            img.paste(art_img, (art_x, art_y))
+        else:
+            draw.rectangle([art_x, art_y, art_x + ART_SIZE, art_y + ART_SIZE],
+                           fill=(35, 35, 35), outline=(70, 70, 70))
+    else:
+        draw.rectangle([art_x, art_y, art_x + ART_SIZE, art_y + ART_SIZE],
+                       fill=(35, 35, 35), outline=(70, 70, 70))
+
+    TEXT_X = art_x + ART_SIZE + 10
+    TEXT_W = W - TEXT_X - 6
+
+    f_track  = _get_font(17, layout)
+    f_artist = _get_font(14, layout)
+    f_album  = _get_font(12, layout)
+
+    track  = page.get("track",  "") or ""
+    artist = page.get("artist", "") or ""
+    album  = page.get("album",  "") or ""
+
+    def measure_block():
+        lines = []
+        for text, font in ((track, f_track), (artist, f_artist), (album, f_album)):
+            text = _truncate_to_fit(draw, text, font, TEXT_W)
+            _, lh = _text_size(draw, text or " ", font)
+            lines.append((text, font, lh))
+        return lines
+
+    text_lines = measure_block()
+    GAP = 5
+    total_h = sum(lh for _, _, lh in text_lines) + GAP * (len(text_lines) - 1)
+    ty = content_y0 + (content_h - total_h) // 2
+
+    colors = [(255, 255, 255), (100, 190, 255), (140, 140, 140)]
+    for (text, font, lh), color in zip(text_lines, colors):
+        if text:
+            draw.text((TEXT_X, ty), text, font=font, fill=color)
+        ty += lh + GAP
+
+    return img
+
+
 # ── Main renderer ────────────────────────────────────────────────────────────────────
 
 def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     if layout is None:
         layout = load_layout()
+
+    # Spotify now-playing — bypass normal text renderer
+    if page.get("_name") == "spotify":
+        try:
+            return render_spotify_page(page, layout)
+        except Exception as exc:
+            print(f"[render] spotify page: {exc}")
 
     # Custom image page — bypass normal text renderer
     if page.get("_name") == "custom_image" and page.get("image_path"):

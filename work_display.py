@@ -166,8 +166,20 @@ def _start_fetch_threads(store: DataStore):
                 print(f"[alerts] {exc}")
                 time.sleep(30)
 
+    def _spotify_loop():
+        from data import fetch_spotify
+        interval = cfg.get("spotify", {}).get("update_interval_s", 10)
+        while True:
+            try:
+                store.spotify.set(fetch_spotify(store))
+                # Invalidate display cache so Spotify page appears/disappears promptly
+                store.display.fetched_at = 0
+            except Exception as exc:
+                print(f"[spotify] {exc}")
+            time.sleep(interval)
+
     for fn in (_weather_loop, _commute_loop, _calendar_loop,
-               _aqi_loop, _alerts_loop):
+               _aqi_loop, _alerts_loop, _spotify_loop):
         threading.Thread(target=fn, daemon=True).start()
 
     print("[fetch] background threads started")

@@ -94,6 +94,7 @@ class DataStore:
         self.work_state = _Cache(ttl_ics)
         self.aqi        = _Cache(ttl_aqi)
         self.alerts     = _Cache(ttl_alt)
+        self.spotify    = _Cache(cfg.get("spotify", {}).get("update_interval_s", 10))
         self.display    = _Cache(cfg.get("display_cache_s", 60))
 
         self.work_state.data = "NORMAL"
@@ -606,3 +607,79 @@ def later_today_desc(hourly: dict, now: datetime) -> str | None:
 def wind_cardinal(deg: float) -> str:
     dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
     return dirs[round(deg / 45) % 8]
+
+
+# ── Spotify ───────────────────────────────────────────────────────────────────────────
+
+import base64 as _base64
+
+_spotify_token: dict = {"access_token": None, "expires_at": 0.0}
+
+
+def _spotify_access_token(cfg: dict) -> str | None:
+    """Return a valid Spotify access token, refreshing if necessary."""
+    sp = cfg.get("spotify") or {}
+    client_id     = sp.get("client_id", "").strip()
+    client_secret = sp.get("client_secret", "").strip()
+    refresh_token = sp.get("refresh_token", "").strip()
+    if not all([client_id, client_secret, refresh_token]):
+        return None
+    global _spotify_token
+    if _spotify_token["access_token"] and time.time() < _spotify_token["expires_at"] - 30:
+        return _spotify_token["access_token"]
+    creds = _base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+    r = requests.post(
+        "https://accounts.spotify.com/api/token",
+        headers={"Authorization": f"Basic {creds}",
+                 "Content-Type": "application/x-www-form-urlencoded"},
+        data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+        timeout=10,
+    )
+    r.raise_for_status()
+    d = r.json()
+    _spotify_token["access_token"] = d["access_token"]
+    _spotify_token["expires_at"]   = time.time() + d.get("expires_in", 3600)
+    return _spotify_token["access_token"]
+
+
+def fetch_spotify(store: DataStore) -> dict | None:
+    """Return currently-playing track info, or None if nothing playing."""
+    token = _spotify_access_token(store.cfg)
+    if not token:
+        return None
+    r = requests.get(
+        "https://api.spotify.com/v1/me/player/currently-playing",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=5,
+    )
+    if r.status_code == 204:   # no content — nothing playing
+        return None
+    if r.status_code != 200:
+        return None
+    data = r.json()
+    if not data.get("is_playing"):
+        return None
+    item = data.get("item") or {}
+    if not item:
+        return None
+    artists   = ", ".join(a.get("name", "") for a in item.get("artists", []))
+    album     = item.get("album") or {}
+    images    = sorted(album.get("images") or [], key=lambda x: x.get("width", 0))
+    art_url   = next((img["url"] for img in images if img.get("width", 0) >= 64), None)
+    if not art_url and images:
+        art_url = images[-1]["url"]
+    return {
+        "track":   item.get("name", ""),
+        "artist":  artists,
+        "album":   album.get("name", ""),
+        "art_url": art_url,
+    }
+
+
+def get_spotify(store: DataStore) -> dict | None:
+    if not store.spotify.fresh():
+        try:
+            store.spotify.set(fetch_spotify(store))
+        except Exception as exc:
+            print(f"[spotify] fetch failed: {exc}")
+    return store.spotify.get()

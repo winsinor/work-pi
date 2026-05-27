@@ -57,6 +57,12 @@
   "alerts": {
     "update_interval_s": 600
   },
+  "spotify": {
+    "client_id":        "",
+    "client_secret":    "",
+    "refresh_token":    "",
+    "update_interval_s": 10
+  },
   "display_cache_s": 60,
   "setup_port": 8080,
   "route_labels": [
