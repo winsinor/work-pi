@@ -32,6 +32,8 @@ from render import (
 )
 
 
+_ci_files_cache: dict = {"mtime": -1.0, "files": []}
+
 # ── Framebuffer helpers ───────────────────────────────────────────────────────────────
 
 def _write_frame(data: bytes, fb_path: str):
@@ -314,9 +316,15 @@ def main():
                          (_ci_start > _ci_end and (_now_h >= _ci_start or _now_h <= _ci_end))
             if _in_window:
                 _img_exts = (".png", ".jpg", ".jpeg", ".bmp")
-                for _img_file in sorted(glob.glob(os.path.join(_custom_dir, "*"))):
-                    if os.path.splitext(_img_file)[1].lower() in _img_exts:
-                        pages.append({"_name": "custom_image", "image_path": _img_file})
+                _dir_mtime = os.path.getmtime(_custom_dir)
+                if _dir_mtime != _ci_files_cache["mtime"]:
+                    _ci_files_cache["files"] = [
+                        f for f in sorted(glob.glob(os.path.join(_custom_dir, "*")))
+                        if os.path.splitext(f)[1].lower() in _img_exts
+                    ]
+                    _ci_files_cache["mtime"] = _dir_mtime
+                for _img_file in _ci_files_cache["files"]:
+                    pages.append({"_name": "custom_image", "image_path": _img_file})
 
         page  = pages[idx % len(pages)]
         dwell = default_dwell

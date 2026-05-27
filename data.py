@@ -64,6 +64,9 @@ class _Cache:
     def fresh(self) -> bool:
         return self.data is not None and time.time() - self.fetched_at < self.ttl
 
+    def stale(self) -> bool:
+        return self.data is not None and time.time() - self.fetched_at > 2 * self.ttl
+
     def set(self, data):
         self.data = data
         self.fetched_at = time.time()

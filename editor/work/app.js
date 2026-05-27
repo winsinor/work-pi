@@ -42,6 +42,7 @@ const state = {
   playing:   false,
   playTimer: null,
   calendarEmptyView: false,  // toggle empty-state preview on calendar page
+  forecastPreview: "normal", // "normal" | "alert" | "stale"
 };
 
 // ── D-pad ──────────────────────────────────────────────────────────────────
@@ -384,6 +385,8 @@ function loadPreview() {
 
   let page = state.currentPage === "global" ? "clock" : state.currentPage;
   if (page === "calendar" && state.calendarEmptyView) page = "calendar_empty";
+  if (page === "forecast" && state.forecastPreview === "alert") page = "forecast_alert";
+  else if (page === "forecast" && state.forecastPreview === "stale") page = "forecast_stale";
   const demo  = state.demo ? 1 : 0;
   const icon  = state.previewIcon ? `&icon=${state.previewIcon}` : "";
   const url   = `/work/preview/${page}?scale=2&demo=${demo}${icon}`;
@@ -510,6 +513,29 @@ function buildPageProps(name) {
   const frag = document.createDocumentFragment();
   const L  = state.layout;
   const pg = (L.pages && L.pages[name]) || {};
+
+  // Forecast: preview state selector (normal / alert / stale)
+  if (name === "forecast") {
+    const sec = document.createElement("div");
+    sec.className = "prop-section";
+    const row = document.createElement("div");
+    row.className = "prop-row";
+    row.innerHTML = `<span class="prop-label">Preview state</span>`;
+    const sel = document.createElement("select");
+    [["normal","Normal"], ["alert","Alert banner"], ["stale","Stale data"]].forEach(([v, lbl]) => {
+      const opt = document.createElement("option");
+      opt.value = v; opt.textContent = lbl;
+      if (state.forecastPreview === v) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", () => {
+      state.forecastPreview = sel.value;
+      loadPreview();
+    });
+    row.appendChild(sel);
+    sec.appendChild(row);
+    frag.appendChild(sec);
+  }
 
   // Calendar: toggle between normal and empty-state element views
   if (name === "calendar") {

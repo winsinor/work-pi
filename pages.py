@@ -71,12 +71,9 @@ def build_weather_page(store: DataStore) -> dict:
     lines.append({"text": f"Hum: {cur_hum:.0f}%", "size": 0, "color": "cyan", "left_align": True})
     lines.append({"text": f"{cur_ws:.0f}mph {wind_cardinal(cur_wd)}", "size": 0, "color": "white", "left_align": True})
 
-    if alert:
-        lines.append({"text": alert, "size": 0, "color": "red", "left_align": True})
-    else:
-        later = later_today_desc(hourly, now)
-        if later:
-            lines.append({"text": later, "size": 0, "color": "darkgrey", "left_align": True})
+    later = later_today_desc(hourly, now)
+    if later:
+        lines.append({"text": later, "size": 0, "color": "darkgrey", "left_align": True})
 
     aqi_overlay = None
     if aqi.get("aqi") is not None:
@@ -111,6 +108,10 @@ def build_weather_page(store: DataStore) -> dict:
     }
     if aqi_overlay:
         page["aqi_overlay"] = aqi_overlay
+    if alert:
+        page["alert_banner"] = alert.lstrip("! ")
+    if store.weather.stale() or store.alerts.stale():
+        page["stale"] = True
     return page
 
 
@@ -139,7 +140,10 @@ def build_commute_page(store: DataStore) -> dict | None:
             lines.append({"text": via, "size": 0, "color": "darkgrey"})
     if not lines:
         return None
-    return {"_name": "commute", "title": "Commute Home", "lines": lines}
+    page = {"_name": "commute", "title": "Commute Home", "lines": lines}
+    if store.commute.stale():
+        page["stale"] = True
+    return page
 
 
 def build_calendar_page(store: DataStore) -> dict | None:
@@ -184,7 +188,10 @@ def build_calendar_page(store: DataStore) -> dict | None:
                 lines.append({"text": time_str, "size": 1, "color": "grey"})
             except Exception:
                 pass
-        return {"_name": "calendar_empty", "title": "Calendar", "lines": lines}
+        page = {"_name": "calendar_empty", "title": "Calendar", "lines": lines}
+        if store.ics_events.stale():
+            page["stale"] = True
+        return page
 
     nxt  = upcoming[0]
     mins = nxt["minutes_until"]
@@ -217,7 +224,10 @@ def build_calendar_page(store: DataStore) -> dict | None:
     else:
         lines.append({"text": "nothing after this event", "color": "grey"})
 
-    return {"_name": "calendar", "title": "Calendar", "lines": lines}
+    page = {"_name": "calendar", "title": "Calendar", "lines": lines}
+    if store.ics_events.stale():
+        page["stale"] = True
+    return page
 
 
 def build_setup_page(ip: str, port: int) -> dict:
