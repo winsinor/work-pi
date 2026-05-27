@@ -322,11 +322,27 @@ class SetupHandler(BaseHTTPRequestHandler):
                 with urllib.request.urlopen(req, timeout=6) as resp:
                     data = json.loads(resp.read())
                 if data:
-                    self._send_json({
-                        "lat": float(data[0]["lat"]),
-                        "lon": float(data[0]["lon"]),
+                    lat = float(data[0]["lat"])
+                    lon = float(data[0]["lon"])
+                    result = {
+                        "lat": lat,
+                        "lon": lon,
                         "display_name": data[0].get("display_name", ""),
-                    })
+                    }
+                    # Auto-detect timezone from coordinates
+                    try:
+                        tz_url = (f"https://timeapi.io/api/timezone/coordinate"
+                                  f"?latitude={lat}&longitude={lon}")
+                        tz_req = urllib.request.Request(
+                            tz_url, headers={"User-Agent": "work-pi-dashboard/1.0"})
+                        with urllib.request.urlopen(tz_req, timeout=6) as tz_resp:
+                            tz_data = json.loads(tz_resp.read())
+                        tz = tz_data.get("timeZone", "")
+                        if tz:
+                            result["timezone"] = tz
+                    except Exception:
+                        pass  # timezone lookup is best-effort
+                    self._send_json(result)
                 else:
                     self._send_json({"error": "Location not found"}, 404)
             except Exception as exc:
@@ -417,7 +433,18 @@ class SetupHandler(BaseHTTPRequestHandler):
 
             cfg_module.save(current)
             complete = cfg_module.is_complete(current)
-            self._send_json({"status": "saved", "complete": complete})
+            # Sync Pi system timezone to match configured timezone
+            tz_synced = False
+            tz = current.get("location", {}).get("timezone", "").strip()
+            if tz:
+                try:
+                    r = subprocess.run(
+                        ["timedatectl", "set-timezone", tz],
+                        capture_output=True, timeout=5)
+                    tz_synced = r.returncode == 0
+                except Exception:
+                    pass
+            self._send_json({"status": "saved", "complete": complete, "tz_synced": tz_synced})
             if complete:
                 config_saved.set()
 

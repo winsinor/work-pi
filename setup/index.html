@@ -787,7 +787,8 @@ $('btn-save').addEventListener('click', async () => {
     });
     const data = await r.json();
     if (data.status === 'saved') {
-      toast('Settings saved ✓');
+      const tzMsg = data.tz_synced ? ' · system timezone synced' : '';
+      toast('Settings saved ✓' + tzMsg);
       _cfg = {..._cfg, ...partial};
       updateStatus(_cfg);
       if (data.complete) {
@@ -964,7 +965,19 @@ $('btn-geocode').addEventListener('click', async () => {
     if (d.lat !== undefined) {
       $('loc-lat').value = d.lat.toFixed(4);
       $('loc-lon').value = d.lon.toFixed(4);
-      statusEl.textContent = '✓ ' + (d.display_name || 'Found');
+      let statusMsg = '✓ ' + (d.display_name || 'Found');
+      if (d.timezone) {
+        const tzSel = $('loc-tz');
+        let found = [...tzSel.options].find(o => o.value === d.timezone);
+        if (!found) {
+          const opt = new Option(d.timezone, d.timezone);
+          tzSel.add(opt);
+          found = opt;
+        }
+        found.selected = true;
+        statusMsg += ` · timezone set to ${d.timezone}`;
+      }
+      statusEl.textContent = statusMsg;
       statusEl.style.color = 'var(--green)';
     } else {
       statusEl.textContent = d.error || 'Location not found';
