@@ -15,7 +15,7 @@ except ImportError:
 from render import _img_to_rgb565
 
 # Taps at or below this Y-fraction trigger power-off
-POWEROFF_Y_FRAC = 0.59
+POWEROFF_Y_FRAC = 0.72
 
 _TTF_PATHS = [
     "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
@@ -46,14 +46,14 @@ _stats_f_btn:  object = None
 
 def _ensure_stats_fonts() -> None:
     global _stats_f_big, _stats_f_info, _stats_f_btn
-    if _stats_f_big is not None:
+    if _stats_f_btn is not None:
         return
     try:
         _stats_f_big  = ImageFont.load_default(size=22)
         _stats_f_info = ImageFont.load_default(size=13)
     except TypeError:  # Pillow < 10
         _stats_f_big = _stats_f_info = ImageFont.load_default()
-    _stats_f_btn = _truetype(44)
+    _stats_f_btn = _truetype(16)
 
 
 class StatsMonitor:
@@ -268,11 +268,11 @@ def render_stats_rgb565(monitor: StatsMonitor, W: int, H: int,
     draw.line([(0, py - 2), (W, py - 2)], fill=(60, 60, 60))
     draw.rectangle([4, py + 2, W - 4, H - 4], fill=(120, 20, 20), outline=(220, 60, 60))
     try:
-        bb = draw.textbbox((0, 0), "Power Off", font=f_btn)
+        bb = draw.textbbox((0, 0), "Hold to Power Off", font=f_btn)
         tw, th = bb[2] - bb[0], bb[3] - bb[1]
         top_offset = bb[1]
     except AttributeError:  # Pillow < 8
-        tw, th, top_offset = len("Power Off") * 6, 11, 0
+        tw, th, top_offset = len("Hold to Power Off") * 6, 11, 0
     btn_top = py + 2
     btn_h   = H - 4 - btn_top
     tx = (W - tw) // 2
