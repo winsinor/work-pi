@@ -399,6 +399,8 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
         start  = now - timedelta(minutes=30)
         end    = now + timedelta(hours=24)
         raw    = recurring_ical_events.of(cal).between(start, end)
+        tz_name = cfg.get("location", {}).get("timezone")
+        local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
         events: list[dict] = []
         for component in raw:
             if component.get("STATUS", "").upper() == "CANCELLED":
@@ -412,9 +414,9 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
             if not isinstance(sv, datetime):
                 continue
             if hasattr(sv, "tzinfo") and sv.tzinfo is not None:
-                sv = sv.astimezone().replace(tzinfo=None)
+                sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
             if hasattr(ev, "tzinfo") and ev.tzinfo is not None:
-                ev = ev.astimezone().replace(tzinfo=None)
+                ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
             title    = str(component.get("SUMMARY", "")).strip()
             location = str(component.get("LOCATION", "") or "").strip()
             if not title:
@@ -504,6 +506,9 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
     new_return = None
     new_title  = None
 
+    tz_name  = cfg.get("location", {}).get("timezone")
+    local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
+
     for component in raw:
         dtstart = component.get("DTSTART")
         if dtstart is None:
@@ -513,7 +518,7 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
             # instead of bare dates. Treat those as all-day; skip real timed events.
             sv = dtstart.dt
             if hasattr(sv, "tzinfo") and sv.tzinfo:
-                sv = sv.astimezone().replace(tzinfo=None)
+                sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
             if sv.hour != 0 or sv.minute != 0:
                 continue
         title = str(component.get("SUMMARY", "")).strip()
