@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# deploy — pull latest from main and restart work-dashboard
+set -euo pipefail
+
+REPO="/home/pi/work-pi"
+SERVICE="work-dashboard"
+
+cd "$REPO"
+echo "==> Pulling latest …"
+git pull origin main
+
+echo "==> Restarting $SERVICE …"
+sudo systemctl restart "$SERVICE"
+
+echo "==> Done. Logs: journalctl -u $SERVICE -f"

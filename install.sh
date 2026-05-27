@@ -172,6 +172,12 @@ sed "s|/home/pi/work-dashboard|$INSTALL_DIR|g" "$SERVICE_SRC" \
 systemctl daemon-reload
 systemctl enable "${SERVICE_NAME}.service"
 
+# ── deploy shortcut ───────────────────────────────────────────────────────────
+info "==> Installing 'deploy' command …"
+ln -sf "$SCRIPT_DIR/deploy" /usr/local/bin/deploy
+chmod +x "$SCRIPT_DIR/deploy"
+green "    'deploy' available system-wide"
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 green "==> Installation complete!"
