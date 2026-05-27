@@ -276,8 +276,16 @@ function exportLayout() {
 function setAt(obj, dotPath, value) {
   const parts = dotPath.split(".");
   for (let i = 0; i < parts.length - 1; i++) {
-    if (obj[parts[i]] === undefined) obj[parts[i]] = {};
-    obj = obj[parts[i]];
+    const key = parts[i];
+    if (obj[key] === undefined || obj[key] === null) obj[key] = {};
+    // If the current node is an array and the next key is a numeric index,
+    // pad with {} so we never create a sparse array (which JSON serialises as null).
+    const nextKey = parts[i + 1];
+    if (Array.isArray(obj[key]) && /^\d+$/.test(nextKey)) {
+      const idx = parseInt(nextKey, 10);
+      while (obj[key].length <= idx) obj[key].push({});
+    }
+    obj = obj[key];
   }
   obj[parts[parts.length - 1]] = value;
 }

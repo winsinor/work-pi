@@ -551,6 +551,7 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     lines      = list(page.get("lines") or [])
     page_name  = page.get("_name", "")
     positions  = layout.get("line_positions", {}).get(page_name, [])
+    positions  = [(p if isinstance(p, dict) else {}) for p in positions]  # guard null entries
     icon_name  = page.get("weather_icon")
     icon_r    = layout["icon"]["radius"]
     icon_gap  = layout["icon"]["gap"]
