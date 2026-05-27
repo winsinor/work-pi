@@ -124,6 +124,20 @@ for i in range(W * H):
 
 ## Development workflow
 
+**Branch strategy — important:**
+- The Pi (`/home/pi/work-pi`) always runs from **`main`**. It does `git pull origin main`.
+- Claude Code sessions develop on a session feature branch (e.g. `claude/todo-review-vJkJw`).
+- **Always merge the feature branch into `main` and push `main` before telling the user to pull.**
+- Never tell the user to pull from a feature branch — they'll get "already up to date" and the fix won't land.
+
+```bash
+# Typical end-of-session deploy
+git checkout main && git merge <feature-branch> --no-edit && git push origin main
+
+# User runs on Pi
+cd /home/pi/work-pi && git pull origin main && sudo systemctl restart work-dashboard
+```
+
 ```bash
 # On Pi — edit config (owned by root, service runs as root)
 sudo python3 -c "import json,sys; c=json.load(open('config.json')); c['key']='val'; json.dump(c,open('config.json','w'),indent=2)"
@@ -137,6 +151,11 @@ journalctl -u work-dashboard -f
 # Check touch events raw
 sudo evtest /dev/input/event4
 ```
+
+## Known Pi environment notes
+
+- Pi system timezone defaults to UTC. `config.json → location.timezone` is the source of truth for display times. Always use `ZoneInfo(tz)` explicitly — never `datetime.astimezone()` with no argument.
+- Setup server (`setup_server.py`) runs `timedatectl set-timezone` on config save to keep the system clock in sync.
 
 ## Touch calibration
 
