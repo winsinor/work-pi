@@ -180,11 +180,9 @@ def build_calendar_page(store: DataStore) -> dict | None:
                 s     = datetime.fromisoformat(ev["start_iso"])
                 e     = datetime.fromisoformat(ev["end_iso"])
                 title = ev.get("title", "Event")
-                if len(title) > 28:
-                    title = title[:27] + "…"
                 label    = "Next" if i == 0 else "Then"
                 time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
-                lines.append({"text": f"{label}: {title}", "color": "white", "wrap_left": True})
+                lines.append({"text": f"{label}: {title}", "color": "white"})
                 lines.append({"text": time_str, "size": 1, "color": "grey"})
             except Exception:
                 pass
@@ -220,7 +218,7 @@ def build_calendar_page(store: DataStore) -> dict | None:
 
     if len(upcoming) > 1:
         t2 = upcoming[1].get("title", "")
-        lines.append({"text": f"Then: {t2}", "color": "grey", "wrap_left": True})
+        lines.append({"text": f"Then: {t2}", "color": "grey"})
     else:
         lines.append({"text": "nothing after this event", "color": "grey"})
 
