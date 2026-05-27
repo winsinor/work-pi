@@ -397,7 +397,7 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
         cal    = icalendar.Calendar.from_ical(r.content)
         now    = local_now(store.cfg)
         start  = now - timedelta(minutes=30)
-        end    = now + timedelta(hours=24)
+        end    = now + timedelta(days=7)
         raw    = recurring_ical_events.of(cal).between(start, end)
         tz_name = cfg.get("location", {}).get("timezone")
         local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None

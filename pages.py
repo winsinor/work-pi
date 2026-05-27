@@ -158,10 +158,33 @@ def build_calendar_page(store: DataStore) -> dict | None:
             pass
 
     if not upcoming:
-        return {"_name": "calendar_empty", "title": "Calendar", "lines": [
+        lines: list[dict] = [
             {"text": "No upcoming", "size": 1, "color": "darkgrey"},
             {"text": "events today", "size": 1, "color": "darkgrey"},
-        ]}
+        ]
+        # Find next 1-2 events from any future day (up to 7 days out)
+        future = []
+        for ev in events:
+            try:
+                s = datetime.fromisoformat(ev["start_iso"])
+                if s > now:
+                    future.append(ev)
+            except Exception:
+                pass
+        for i, ev in enumerate(future[:2]):
+            try:
+                s     = datetime.fromisoformat(ev["start_iso"])
+                e     = datetime.fromisoformat(ev["end_iso"])
+                title = ev.get("title", "Event")
+                if len(title) > 28:
+                    title = title[:27] + "…"
+                label    = "Next" if i == 0 else "Then"
+                time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
+                lines.append({"text": f"{label}: {title}", "color": "white", "wrap_left": True})
+                lines.append({"text": time_str, "size": 1, "color": "grey"})
+            except Exception:
+                pass
+        return {"_name": "calendar_empty", "title": "Calendar", "lines": lines}
 
     nxt  = upcoming[0]
     mins = nxt["minutes_until"]
