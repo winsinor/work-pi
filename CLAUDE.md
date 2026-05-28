@@ -1,6 +1,6 @@
 # CLAUDE.md — work-pi dashboard
 
-Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches weather, commute times, calendar events, AQI, and alerts; renders pages as RGB565 frames written directly to `/dev/fb1`.
+Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches weather, commute times, calendar events, AQI, alerts, and Spotify now-playing; renders pages as RGB565 frames written directly to `/dev/fb1`.
 
 ## Hardware
 
@@ -23,6 +23,14 @@ Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches
 cd /home/pi/work-pi && git pull origin main && sudo systemctl restart work-dashboard
 ```
 
+**Shortcut — `deploy` command (installed by install.sh or manually):**
+```bash
+# One-time manual install:
+sudo ln -sf /home/pi/work-pi/deploy /usr/local/bin/deploy && sudo chmod +x /home/pi/work-pi/deploy
+# Then just run:
+deploy
+```
+
 ## Development workflow
 
 **All development commits go directly to `main`.** Do not create feature branches unless the user explicitly asks for one.
@@ -32,7 +40,7 @@ cd /home/pi/work-pi && git pull origin main && sudo systemctl restart work-dashb
 git add <files>
 git commit -m "description"
 git push origin main
-# Then tell the user to run the standard update command above
+# Then tell the user to run: deploy
 ```
 
 ```bash
@@ -54,15 +62,16 @@ sudo evtest /dev/input/event4
 | File | Purpose |
 |------|---------|
 | `work_display.py` | Main loop: fetch → render → write to fb |
-| `render.py` | PIL rendering, `load_layout()`, `render_page_rgb565()`, `solid_frame()` |
-| `pages.py` | Page data builders (`get_display()`, `build_setup_page()`, etc.) |
-| `data.py` | All data fetchers (weather, commute, calendar, AQI, alerts) + `DataStore` |
+| `render.py` | PIL rendering, `load_layout()`, `render_page_rgb565()`, `_img_to_rgb565()`, `solid_frame()` |
+| `pages.py` | Page data builders (`build_display()`, `build_spotify_page()`, etc.) |
+| `data.py` | All data fetchers (weather, commute, calendar, AQI, alerts, Spotify) + `DataStore` + `_Cache` |
 | `stats.py` | `StatsMonitor` + `render_stats_rgb565()` — bitmap-font stats overlay |
 | `touch.py` | evdev touch reader — unbuffered, dual-axis coord capture |
-| `setup_server.py` | HTTP config server (port 8080) + layout editor backend |
+| `setup_server.py` | HTTP config server (port 8080) + layout editor backend + Spotify OAuth |
 | `config.py` | `load()`, `is_complete()`, `resolve_font_path()` |
-| `setup/index.html` | Setup web UI (Wi-Fi, location, API keys, display, GPIO, etc.) |
+| `setup/index.html` | Setup web UI (Wi-Fi, location, API keys, Spotify, display, GPIO, etc.) |
 | `editor/work/` | Layout editor (HTML + JS + CSS) |
+| `deploy` | One-liner update script: git pull + restart |
 | `config.json` | Operational config — **gitignored, never commit** |
 | `work_layout.json` | Visual layout overrides — committed, edited via `/editor/work` |
 | `config.example.json` | Template for config.json |
@@ -71,16 +80,22 @@ sudo evtest /dev/input/event4
 
 ```
 work_display.py
-  ├── _start_fetch_threads()  — weather/commute/calendar/aqi/alerts loops (daemon threads)
+  ├── _start_fetch_threads()  — weather/commute/calendar/aqi/alerts/spotify loops (daemon threads)
   ├── _start_button_threads() — gpiozero K2/K3 wiring
   ├── touch.start_touch()     — evdev touch → nav queue or stats toggle
   ├── _nav_q (Queue[int])     — +1 / -1 from both touch and K3 GPIO
+  ├── _ci_files_cache         — custom images glob cached by directory mtime
   └── main loop
         ├── stats mode: stats_mod.render_stats_rgb565() → fb, wait on _stats_wake(2s)
         └── page mode:  render_page_rgb565(page, layout) → fb, wait on _nav_q(dwell)
 ```
 
 **Config vs layout separation**: `config.json` (setup screen) = operational settings. `work_layout.json` (layout editor) = visual/positional layout. They don't overlap. `page_dwell_s` lives only in config.
+
+**Page rendering dispatch** in `render_page_pil`:
+1. `_name == "spotify"` → `render_spotify_page()` (album art + text)
+2. `_name == "custom_image"` → `render_custom_image_page()` (full-frame image)
+3. Everything else → standard text/icon/grid renderer
 
 ## Layout scaling
 
@@ -109,7 +124,8 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - Uses PIL bitmap font (`ImageFont.load_default(size=N)`) — no TrueType, no file I/O
 - Updates every ~2 seconds (`_stats_wake.wait(timeout=2)`)
 - **Tap anywhere to dismiss; long-press anywhere to power off**
-- `POWEROFF_Y_FRAC = 0.59` controls where the button is drawn, not tap detection (power-off is long-press to avoid XPT2046 Y-axis inversion issues)
+- `POWEROFF_Y_FRAC = 0.72` controls where the power-off button is drawn
+- Fonts loaded once at module level via `_ensure_stats_fonts()` — not recreated each render
 - Layout constants in `stats.py` (`ROW_H`, `LBL_W`, etc.) are tuned for 320×240. If the display size changes, update them manually — the stats overlay is **not** auto-scaled.
 - **Do not use `anchor="rt"` with bitmap fonts** — it's silently ignored; use explicit `x = W - VAL_W + offset`
 
@@ -120,6 +136,7 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - Layout editor at `/editor/work` — saves to `work_layout.json`
 - **Screenshot of the live display** is on the **Display tab** — button hits `/api/screenshot`
 - Location "Look up" button geocodes via Nominatim then auto-detects timezone via `timeapi.io` — populates lat, lon, and timezone dropdown automatically
+- **Spotify tab** — OAuth connect flow; see Spotify section below
 
 ## GPIO buttons (gpiozero)
 
@@ -150,17 +167,78 @@ PNG/JPG/BMP files in `custom_images/` directory are appended as extra pages. Tim
 
 Supports overnight windows (start > end): `_ci_start > _ci_end and (_now_h >= _ci_start or _now_h <= _ci_end)`.
 
+File list is cached by directory mtime (`_ci_files_cache`) — only re-scanned when files are added/removed.
+
 ## RGB565 framebuffer
 
+Shared helper `_img_to_rgb565(img)` in `render.py`, imported by `stats.py`. Uses numpy fast path when available (~5–10x faster on ARMv6), falls back to pure Python:
+
 ```python
-raw = img.tobytes()  # RGBRGB... bytes
-buf = bytearray(W * H * 2)
-for i in range(W * H):
-    r, g, b = raw[i*3], raw[i*3+1], raw[i*3+2]
-    p = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-    buf[i*2]   = p & 0xFF   # little-endian
-    buf[i*2+1] = p >> 8
+# numpy path (preferred)
+arr = np.frombuffer(img.tobytes(), np.uint8).reshape(-1, 3)
+r, g, b = arr[:,0].astype(np.uint16), arr[:,1].astype(np.uint16), arr[:,2].astype(np.uint16)
+buf = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+return buf.astype('<u2').tobytes()
 ```
+
+## Performance notes (Pi 1B+)
+
+- **Rendering**: ~200ms/frame × 8s dwell ≈ 2.5% average CPU — dominant cost
+- **ICS/calendar parsing**: `recurring_ical_events` can spike 300–500ms on ARMv6 — **minimum 5-minute interval enforced** in setup UI; do not lower below 300s
+- **Layout cache**: `load_layout()` returns a cached scaled dict; only reloads on file mtime change — no deepcopy on every loop iteration
+- **Custom image cache**: keyed by `(path, mtime, W, H)` — `Image.open/fit` only runs on first render per track
+- **Font cache**: stats overlay fonts loaded once at module level via `_ensure_stats_fonts()`
+- **Spotify album art cache**: keyed by `(url, size)` — network fetch only on first render per track; cleared at 30 entries
+
+## Spotify now-playing
+
+Page only appears in rotation while music is actively playing. Disappears within ~10s of pause/stop.
+
+**Setup (one-time):**
+1. Create a Spotify developer app at developer.spotify.com/dashboard
+2. Add the redirect URI shown in setup UI Spotify tab to your app's Redirect URIs — it's `http://<pi-local-ip>:8080/spotify/callback`
+3. Enter Client ID + Client Secret in setup UI → Save
+4. Click Connect Spotify → authorize → tab closes automatically
+
+**Redirect URI gotcha**: always derived from `_get_local_ip()` + `setup_port` — NOT the HTTP `Host` header. Both the auth URL and the token exchange callback use the same source, so they always match. If the user sees "redirect_uri not matching", the URI in their Spotify app settings doesn't match what the Pi computed — re-copy from the Spotify tab.
+
+**Config keys** (`config.json`):
+```json
+"spotify": {
+  "client_id": "...",
+  "client_secret": "...",
+  "refresh_token": "...",
+  "update_interval_s": 10
+}
+```
+`refresh_token` is written automatically by the OAuth callback — never set it manually.
+
+**OAuth endpoints** (setup_server.py):
+- `GET /api/spotify/redirect-uri` — returns the canonical redirect URI
+- `GET /api/spotify/auth-url` — returns Spotify authorization URL
+- `GET /spotify/callback` — exchanges code for tokens, saves refresh_token, returns success page
+- `GET /api/spotify/status` — returns `{connected, has_credentials}`
+
+## Weather alerts
+
+Active NWS alerts render as a full-width red banner strip (18px) just below the page header, right-aligned text. Fetched via `api.weather.gov/alerts/active`. Alert text stored in `page["alert_banner"]` — not as a line in `page["lines"]`.
+
+## Stale-data indicator
+
+When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` and render.py draws a 2px amber border around the entire frame. `_Cache.stale()` method handles the check. Clears automatically once data refreshes.
+
+## Layout editor
+
+- Canvas is 320×240 — matches display, no coordinate translation needed
+- Line positions stored in `work_layout.json → line_positions[page_name][index]`
+- `setAt()` in app.js pads arrays with `{}` when setting out-of-bounds indices — prevents sparse arrays → JSON null → Python None → `.get()` crash
+- `render.py` normalizes positions on read: `[(p if isinstance(p, dict) else {}) for p in positions]`
+- Forecast page has "Preview state" dropdown: Normal / Alert banner / Stale data
+- Calendar page has "No upcoming events view" toggle for the empty-state preview
+
+**Demo pages** for preview (`setup_server.py → _DEMO_PAGES`): `forecast`, `forecast_alert`, `forecast_stale`, `calendar`, `calendar_empty`, `commute`, `wfh`, `ooo`, `holiday`. Add new page variants here when adding features.
+
+**Adding a new tab to setup UI**: add `data-tab="name"` to the tabs bar AND add `"name"` to the `TABS` JS array — forgetting the array causes all subsequent tabs to show wrong panels.
 
 ## Known Pi environment gotchas
 
@@ -174,10 +252,17 @@ for i in range(W * H):
 - Outlook exports all-day events as midnight-to-midnight datetimes instead of bare `date` objects. `fetch_work_state` detects these by checking `sv.hour == 0 and sv.minute == 0` after timezone conversion.
 - `recurring_ical_events.of(cal).between(start, end)` is passed naive datetimes from `local_now()` — these represent local time in the configured timezone.
 - `icalendar>=6.1.0` is required. On Debian Bullseye/Bookworm, `pip install` may need `--break-system-packages` or use a venv if SSL errors occur.
+- Fetch window is `now → now + 7 days` — wide enough to show next upcoming events on the empty-state calendar page.
 
 **Data fetching:**
 - All fetchers retry on a 30-second backoff after any failure.
 - Fetch threads are daemon threads — they die with the main process.
+- Spotify thread also invalidates `store.display.fetched_at = 0` on each update so the page appears/disappears promptly.
+
+**Git on Pi (service runs as root):**
+- If git push/pull fails with "insufficient permission for adding object to repository", root owns `.git/objects`: `sudo chown -R pi:pi /home/pi/work-pi/.git`
+- Always use `sudo git stash / pull / pop` when the service has written files as root.
+- If `work_layout.json` has a merge conflict after stash pop: `sudo git checkout --theirs work_layout.json`
 
 **Display rotation:**
 - If the setup screen appears upside-down, set `DISPLAY_ROTATION=180` environment variable.
@@ -185,6 +270,8 @@ for i in range(W * H):
 **install.sh:**
 - Configures NetworkManager to not manage the wlan0 interface until setup is complete, to avoid breaking existing WiFi.
 - Waits for DNS resolution before running `pip install`.
+- Installs `python3-numpy` as optional apt dep for faster RGB565 conversion.
+- Symlinks `deploy` script to `/usr/local/bin/deploy`.
 
 ## Touch calibration
 
