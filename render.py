@@ -537,40 +537,73 @@ def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
         return None
 
 
+def _album_bg_color(art_img: "Image.Image") -> tuple:
+    """Sample the album art and return a darkened tint safe for white text."""
+    import colorsys
+    r, g, b = art_img.resize((1, 1), Image.LANCZOS).getpixel((0, 0))
+    h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
+    v2 = min(v * 0.5, 0.28)   # darken: cap at 28% brightness
+    s2 = min(s * 1.2, 1.0)    # slight saturation boost for vividness
+    r2, g2, b2 = colorsys.hsv_to_rgb(h, s2, v2)
+    return (int(r2 * 255), int(g2 * 255), int(b2 * 255))
+
+
+def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
+    """Approximate the Spotify circle icon: green disc with 3 radiating arcs."""
+    r = size // 2
+    cx, cy = x + r, y + r
+    draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
+    off = max(1, r // 3)
+    ac_x, ac_y = cx - off, cy + off
+    # Arcs go clockwise from upper-right through right to lower-right,
+    # offset toward lower-left so they radiate outward like the Spotify logo
+    for arc_r in [max(1, r * 2 // 5), max(2, r * 3 // 5), max(2, r * 4 // 5)]:
+        bb = [ac_x - arc_r, ac_y - arc_r, ac_x + arc_r, ac_y + arc_r]
+        draw.arc(bb, start=325, end=55, fill=(255, 255, 255), width=1)
+
+
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     W = layout["canvas"]["width"]
     H = layout["canvas"]["height"]
 
-    BG        = (25,  20,  20)
-    GREEN     = (29, 185,  84)
-    WHITE     = (255, 255, 255)
-    MUTED     = (179, 179, 179)
-    DIM       = (51,  51,  51)
-    ALB_COLOR = (102, 102, 102)
+    SPOTIFY_DARK = (25,  20,  20)
+    GREEN        = (29, 185,  84)
+    WHITE        = (255, 255, 255)
+    MUTED        = (179, 179, 179)
+    DIM          = (51,  51,  51)
+    ALB_COLOR    = (102, 102, 102)
+
+    # ── Album art (fetch early so we can derive bg color) ────────────────────
+    ART_SIZE = 110
+    art_x = (W - ART_SIZE) // 2
+    art_y = 40
+    art_url = page.get("art_url")
+    art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+
+    BG = _album_bg_color(art_img) if art_img else SPOTIFY_DARK
 
     img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
     # ── Header ───────────────────────────────────────────────────────────────
     f_label = _get_font(12, layout)
-    f_pill  = _get_font(10, layout)
+    f_logo  = _get_font(10, layout)
 
     draw.text((16, 8), "NOW PLAYING", font=f_label, fill=MUTED)
 
-    draw.rectangle([234, 4, 304, 22], fill=GREEN)
-    pw, ph = _text_size(draw, "SPOTIFY", f_pill)
-    draw.text((234 + (70 - pw) // 2, 4 + (18 - ph) // 2), "SPOTIFY",
-              font=f_pill, fill=BG)
+    # Spotify icon + wordmark, right-aligned
+    ICON_SIZE = 14
+    spot_text = "Spotify"
+    sw, sh = _text_size(draw, spot_text, f_logo)
+    logo_x = W - 6 - sw - 3 - ICON_SIZE
+    icon_y = 4 + (18 - ICON_SIZE) // 2
+    _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
+    draw.text((logo_x + ICON_SIZE + 3, 4 + (18 - sh) // 2),
+              spot_text, font=f_logo, fill=WHITE)
 
     draw.line([(0, 28), (W, 28)], fill=DIM, width=1)
 
-    # ── Album art (centered, 110x110) ────────────────────────────────────────
-    ART_SIZE = 110
-    art_x = (W - ART_SIZE) // 2
-    art_y = 40
-
-    art_url = page.get("art_url")
-    art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+    # ── Album art ────────────────────────────────────────────────────────────
     draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
                    fill=(35, 35, 35), outline=DIM)
     if art_img:
@@ -580,7 +613,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     MAX_W    = 288
     f_track  = _get_font(22, layout)
     f_artist = _get_font(16, layout)
-    f_album  = _get_font(12, layout)
+    f_album  = _get_font(14, layout)
 
     track  = _truncate_to_fit(draw, page.get("track",  "") or "", f_track,  MAX_W)
     artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, MAX_W)
@@ -595,13 +628,30 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
             tw, _ = _text_size(draw, text, font)
             draw.text(((W - tw) // 2, y), text, font=font, fill=color)
 
-    # ── Progress bar ─────────────────────────────────────────────────────────
-    BAR_Y  = 232
-    BAR_X0 = 16
-    BAR_X1 = W - 16
-    draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
+    # ── Progress bar with position / remaining time ───────────────────────────
+    BAR_Y      = 232
+    f_time     = _get_font(10, layout)
+    SIDE_GAP   = 4
     progress_ms = page.get("progress_ms") or 0
     duration_ms = page.get("duration_ms") or 0
+
+    def _fmt_ms(ms: int) -> str:
+        s = max(0, ms) // 1000
+        return f"{s // 60}:{s % 60:02d}"
+
+    if duration_ms > 0:
+        pos_str = _fmt_ms(progress_ms)
+        rem_str = f"-{_fmt_ms(max(0, duration_ms - progress_ms))}"
+        pw, ph = _text_size(draw, pos_str, f_time)
+        rw, rh = _text_size(draw, rem_str, f_time)
+        BAR_X0 = pw + SIDE_GAP * 2
+        BAR_X1 = W - rw - SIDE_GAP * 2
+        draw.text((SIDE_GAP, BAR_Y - ph // 2), pos_str, font=f_time, fill=MUTED)
+        draw.text((W - rw - SIDE_GAP, BAR_Y - rh // 2), rem_str, font=f_time, fill=MUTED)
+    else:
+        BAR_X0, BAR_X1 = 16, W - 16
+
+    draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
     if duration_ms > 0:
         fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(progress_ms / duration_ms, 1.0))
         if fill_x > BAR_X0:
