@@ -462,8 +462,8 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
     _, th = _text_size(draw, "72\xb0", tmp_f)
     gap   = 3
     y0    = grid_top + 5
-    y_tmp  = y0 + lh + gap + 2
-    y_rain = y_tmp + th + gap + 2
+    y_tmp  = y0 + lh + gap + 2 + 4
+    y_rain = y_tmp + th + gap + 2 + 4
 
     for i, item in enumerate(items[:cols]):
         x = i * col_w
