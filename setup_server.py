@@ -498,6 +498,46 @@ class SetupHandler(BaseHTTPRequestHandler):
             self._send_json({"auth_url": f"https://accounts.spotify.com/authorize?{params}",
                              "redirect_uri": redirect_uri})
 
+        elif path == "/spotify/callback":
+            qs   = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            code = (qs.get("code") or [None])[0]
+            err  = (qs.get("error") or [None])[0]
+            if err or not code:
+                self._send_html_str(
+                    f"<h2>Spotify auth failed</h2><p>{err or 'No code'}</p><p>Close this tab and try again.</p>")
+                return
+            cfg = cfg_module.load()
+            sp  = cfg.get("spotify") or {}
+            client_id     = sp.get("client_id", "").strip()
+            client_secret = sp.get("client_secret", "").strip()
+            port = cfg.get("setup_port", 8080)
+            redirect_uri = f"http://localhost:{port}/spotify/callback"
+            try:
+                import base64 as _b64
+                creds = _b64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+                r = urllib.request.Request(
+                    "https://accounts.spotify.com/api/token",
+                    data=urllib.parse.urlencode({
+                        "grant_type":   "authorization_code",
+                        "code":         code,
+                        "redirect_uri": redirect_uri,
+                    }).encode(),
+                    headers={"Authorization": f"Basic {creds}",
+                             "Content-Type": "application/x-www-form-urlencoded"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(r, timeout=10) as resp:
+                    tokens = json.loads(resp.read())
+                cfg.setdefault("spotify", {})["refresh_token"] = tokens["refresh_token"]
+                cfg_module.save(cfg)
+                self._send_html_str(
+                    "<h2 style='color:#1db954'>&#x2713; Spotify connected!</h2>"
+                    "<p>Your account is linked. You can close this tab.</p>"
+                    "<script>setTimeout(()=>window.close(),2000)</script>")
+            except Exception as exc:
+                self._send_html_str(
+                    f"<h2>Token exchange failed</h2><pre>{exc}</pre><p>Close this tab and try again.</p>")
+
         else:
             self.send_error(404)
 
