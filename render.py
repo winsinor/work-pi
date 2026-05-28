@@ -661,7 +661,7 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
         bfont = _get_font(12, layout)
         btext = f"! {alert_banner}"
         btw, bth = _text_size(draw, btext, bfont)
-        draw.text(((W - btw) // 2, b0 + (BANNER_H - bth) // 2), btext,
+        draw.text((W - btw - 6, b0 + (BANNER_H - bth) // 2), btext,
                   font=bfont, fill=(255, 210, 210))
         content_y0 = b1 + 1
     content_h  = grid_top - content_y0
