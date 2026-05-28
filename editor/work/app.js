@@ -25,11 +25,15 @@ const COLOR_HEX = {
   magenta:"#dc32dc", blue:"#2850dc", brown:"#a05000", black:"#000000",
 };
 
-const PAGE_NAMES = ["clock","forecast","calendar","commute","wfh","ooo","holiday"];
+const PAGE_NAMES = ["clock","forecast","calendar","commute","wfh","ooo","holiday","spotify"];
 const PAGE_LABELS = {
   clock:"Clock", forecast:"Forecast", calendar:"Calendar",
   commute:"Commute", wfh:"WFH", ooo:"OOO", holiday:"Holiday",
+  spotify:"Spotify",
 };
+
+const CALENDAR_DRIVEN_PAGES = ["wfh","ooo","holiday"];
+const MARQUEE_PAGES          = ["spotify","calendar"];
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -583,10 +587,28 @@ function buildPageProps(name) {
   if (name === "forecast") frag.appendChild(buildForecastExtra());
 
   // Page Settings below elements
-  frag.appendChild(section("Page Settings", [
-    toggleRow("Enabled", `pages.${name}.enabled`, pg.enabled !== false),
-    numRow("Dwell (s)", `pages.${name}.dwell_seconds`, pg.dwell_seconds || 8, 1, 60),
-  ]));
+  const settingsRows = [toggleRow("Enabled", `pages.${name}.enabled`, pg.enabled !== false)];
+
+  if (CALENDAR_DRIVEN_PAGES.includes(name)) {
+    const dwellRow = document.createElement("div");
+    dwellRow.className = "prop-row";
+    dwellRow.innerHTML = `<span class="prop-label">Dwell</span><span style="opacity:0.38;font-size:20px;line-height:1">∞</span>`;
+    settingsRows.push(dwellRow);
+    const note = document.createElement("p");
+    note.className = "prop-note";
+    note.textContent = "Shown while a matching calendar event is active — dwell doesn't apply.";
+    settingsRows.push(note);
+  } else {
+    settingsRows.push(numRow("Dwell (s)", `pages.${name}.dwell_seconds`, pg.dwell_seconds || 8, 1, 60));
+    if (MARQUEE_PAGES.includes(name)) {
+      const note = document.createElement("p");
+      note.className = "prop-note";
+      note.textContent = "If scrolling text hasn’t finished a full pass, dwell extends up to 3×.";
+      settingsRows.push(note);
+    }
+  }
+
+  frag.appendChild(section("Page Settings", settingsRows));
 
   return frag;
 }

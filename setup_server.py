@@ -240,6 +240,16 @@ _DEMO_PAGES: dict = {
         "title": "Holiday",
         "lines": [{"text": "Martin Luther King Day", "size": 3, "color": "white"}],
     },
+    "spotify": {
+        "_name":       "spotify",
+        "title":       "Now Playing",
+        "track":       "A Really Long Song Title That Will Scroll Across The Screen",
+        "artist":      "Artist Name",
+        "album":       "Album Name",
+        "art_url":     None,
+        "progress_ms": 75000,
+        "duration_ms": 210000,
+    },
 }
 
 
