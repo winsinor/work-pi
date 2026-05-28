@@ -471,7 +471,7 @@ class SetupHandler(BaseHTTPRequestHandler):
         elif path == "/api/spotify/redirect-uri":
             cfg  = cfg_module.load()
             port = cfg.get("setup_port", 8080)
-            self._send_json({"redirect_uri": f"http://localhost:{port}/spotify/callback"})
+            self._send_json({"redirect_uri": f"http://127.0.0.1:{port}/spotify/callback"})
 
         elif path == "/api/spotify/status":
             cfg = cfg_module.load()
@@ -488,7 +488,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "client_id not set"}, 400)
                 return
             port = cfg.get("setup_port", 8080)
-            redirect_uri = f"http://localhost:{port}/spotify/callback"
+            redirect_uri = f"http://127.0.0.1:{port}/spotify/callback"
             params = urllib.parse.urlencode({
                 "client_id":     client_id,
                 "response_type": "code",
@@ -511,7 +511,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             client_id     = sp.get("client_id", "").strip()
             client_secret = sp.get("client_secret", "").strip()
             port = cfg.get("setup_port", 8080)
-            redirect_uri = f"http://localhost:{port}/spotify/callback"
+            redirect_uri = f"http://127.0.0.1:{port}/spotify/callback"
             try:
                 import base64 as _b64
                 creds = _b64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
@@ -591,7 +591,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             client_id     = sp.get("client_id", "").strip()
             client_secret = sp.get("client_secret", "").strip()
             port = cfg.get("setup_port", 8080)
-            redirect_uri = f"http://localhost:{port}/spotify/callback"
+            redirect_uri = f"http://127.0.0.1:{port}/spotify/callback"
             try:
                 import base64 as _b64
                 creds = _b64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
