@@ -600,6 +600,24 @@ def calendar_needs_scroll() -> bool:
     return bool(_scroll_states.get("calendar_0", {}).get("needs_scroll"))
 
 
+# ── Spotify progress interpolation ───────────────────────────────────────────────────
+
+_spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0}
+
+
+def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int:
+    """Return progress_ms advanced by wall-clock time since last API update."""
+    now = _time_mod.time()
+    sp  = _spotify_progress
+    if track != sp["track"] or progress_ms != sp["base_ms"]:
+        sp["track"]       = track
+        sp["base_ms"]     = progress_ms
+        sp["received_at"] = now
+    elapsed_ms = int((now - sp["received_at"]) * 1000)
+    current    = progress_ms + elapsed_ms
+    return min(current, duration_ms) if duration_ms > 0 else current
+
+
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     W = layout["canvas"]["width"]
     H = layout["canvas"]["height"]
@@ -611,10 +629,10 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     DIM          = (51,  51,  51)
     ALB_COLOR    = (102, 102, 102)
 
-    HEADER_H  = 28
+    HEADER_H  = 56
     BAR_ZONE  = 14   # px reserved at bottom for progress bar + time labels
     CONTENT_Y = HEADER_H + 1
-    CONTENT_H = H - CONTENT_Y - BAR_ZONE  # ~197 px
+    CONTENT_H = H - CONTENT_Y - BAR_ZONE
 
     # ── Album art (left, fetch early for bg color) ────────────────────────────
     ART_PAD  = 4
@@ -630,17 +648,18 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    f_label = _get_font(12, layout)
-    f_logo  = _get_font(10, layout)
-    draw.text((16, 8), "NOW PLAYING", font=f_label, fill=MUTED)
+    f_label = _get_font(20, layout)
+    f_logo  = _get_font(17, layout)
+    _, lbl_h = _text_size(draw, "NOW PLAYING", f_label)
+    draw.text((16, (HEADER_H - lbl_h) // 2), "NOW PLAYING", font=f_label, fill=MUTED)
 
-    ICON_SIZE = 14
+    ICON_SIZE = 22
     spot_text = "Spotify"
     sw, sh = _text_size(draw, spot_text, f_logo)
-    logo_x  = W - 6 - sw - 3 - ICON_SIZE
+    logo_x  = W - 8 - sw - 4 - ICON_SIZE
     icon_y  = (HEADER_H - ICON_SIZE) // 2
     _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
-    draw.text((logo_x + ICON_SIZE + 3, (HEADER_H - sh) // 2),
+    draw.text((logo_x + ICON_SIZE + 4, (HEADER_H - sh) // 2),
               spot_text, font=f_logo, fill=WHITE)
     draw.line([(0, HEADER_H), (W, HEADER_H)], fill=DIM, width=1)
 
@@ -700,16 +719,16 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     BAR_Y       = H - 8
     f_time      = _get_font(10, layout)
     SIDE_GAP    = 4
-    progress_ms = page.get("progress_ms") or 0
     duration_ms = page.get("duration_ms") or 0
+    current_ms  = _interpolate_progress(track, page.get("progress_ms") or 0, duration_ms)
 
     def _fmt_ms(ms: int) -> str:
         s = max(0, ms) // 1000
         return f"{s // 60}:{s % 60:02d}"
 
     if duration_ms > 0:
-        pos_str = _fmt_ms(progress_ms)
-        rem_str = _fmt_ms(max(0, duration_ms - progress_ms))
+        pos_str = _fmt_ms(current_ms)
+        rem_str = _fmt_ms(max(0, duration_ms - current_ms))
         pw, ph  = _text_size(draw, pos_str, f_time)
         rw, rh  = _text_size(draw, rem_str, f_time)
         BAR_X0  = pw + SIDE_GAP * 2
@@ -721,7 +740,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
     if duration_ms > 0:
-        fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(progress_ms / duration_ms, 1.0))
+        fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(current_ms / duration_ms, 1.0))
         if fill_x > BAR_X0:
             draw.line([(BAR_X0, BAR_Y), (fill_x, BAR_Y)], fill=GREEN, width=4)
 

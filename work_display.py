@@ -31,7 +31,7 @@ from render import (
     invalidate_layout_cache, spotify_needs_scroll, calendar_needs_scroll,
 )
 
-_SPOTIFY_SCROLL_TICK = 1.0  # seconds between re-renders when scrolling
+_SPOTIFY_SCROLL_TICK = 0.3  # seconds between re-renders when scrolling
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
