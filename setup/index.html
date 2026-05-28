@@ -986,6 +986,8 @@ $('btn-upload-image').addEventListener('click', async () => {
 
 loadConfig();
 checkWifiStatus();
+loadSpotifyRedirectUri();
+loadSpotifyStatus();
 
 // Live required-field status update
 ['addr-home', 'addr-work', 'key-tomtom'].forEach(id => {
@@ -1090,10 +1092,9 @@ async function loadSpotifyStatus() {
 
 async function loadSpotifyRedirectUri() {
   try {
-    const r = await fetch('/api/local_ip');
+    const r = await fetch('/api/spotify/redirect-uri');
     const d = await r.json();
-    const port = _cfg?.setup_port || 8080;
-    $('spotify-redirect-uri').textContent = `http://${d.ip}:${port}/spotify/callback`;
+    $('spotify-redirect-uri').textContent = d.redirect_uri;
   } catch(e) {}
 }
 
