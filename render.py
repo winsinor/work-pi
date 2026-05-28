@@ -559,39 +559,45 @@ def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
 
 # ── Spotify scroll state ──────────────────────────────────────────────────────────────
 
-_scroll_state: dict = {
-    "track": "", "offset": 0.0, "needs_scroll": False,
-    "entered_at": 0.0, "last_tick": 0.0,
-}
+_scroll_states: dict[str, dict] = {}
 _SCROLL_SPEED   = 30.0  # pixels per second
 _SCROLL_PAUSE_S = 1.5   # seconds to hold before starting to scroll
 
 
-def _tick_scroll(track: str, title_w: int, text_w: int) -> tuple:
-    """Advance scroll offset. Returns (pixel_offset, needs_scroll)."""
-    global _scroll_state
-    now  = _time_mod.time()
+def _make_scroll_slot() -> dict:
+    return {"key": "", "offset": 0.0, "needs_scroll": False,
+            "entered_at": 0.0, "last_tick": 0.0}
+
+
+def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
+    """Advance scroll offset for a named slot. Returns (pixel_offset, needs_scroll)."""
+    now   = _time_mod.time()
     needs = title_w > text_w
-    _scroll_state["needs_scroll"] = needs
+    state = _scroll_states.setdefault(slot, _make_scroll_slot())
+    state["needs_scroll"] = needs
     if not needs:
         return 0, False
-    if track != _scroll_state["track"]:
-        _scroll_state.update(track=track, offset=0.0, needs_scroll=True,
-                             entered_at=now, last_tick=now)
+    if key != state["key"]:
+        state.update(key=key, offset=0.0, needs_scroll=True,
+                     entered_at=now, last_tick=now)
         return 0, True
-    if now - _scroll_state["entered_at"] < _SCROLL_PAUSE_S:
-        _scroll_state["last_tick"] = now
+    if now - state["entered_at"] < _SCROLL_PAUSE_S:
+        state["last_tick"] = now
         return 0, True
-    dt = now - _scroll_state["last_tick"]
-    _scroll_state["last_tick"] = now
+    dt = now - state["last_tick"]
+    state["last_tick"] = now
     gap   = 40
     total = title_w + gap
-    _scroll_state["offset"] = (_scroll_state["offset"] + dt * _SCROLL_SPEED) % total
-    return int(_scroll_state["offset"]), True
+    state["offset"] = (state["offset"] + dt * _SCROLL_SPEED) % total
+    return int(state["offset"]), True
 
 
 def spotify_needs_scroll() -> bool:
-    return bool(_scroll_state.get("needs_scroll"))
+    return bool(_scroll_states.get("spotify", {}).get("needs_scroll"))
+
+
+def calendar_needs_scroll() -> bool:
+    return bool(_scroll_states.get("calendar_0", {}).get("needs_scroll"))
 
 
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
@@ -670,7 +676,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     # Track title — scroll if too wide
     tw, _ = _text_size(draw, track, f_track) if track else (0, 0)
-    offset, needs_scroll = _tick_scroll(track, tw, TEXT_W)
+    offset, needs_scroll = _tick_scroll("spotify", track, tw, TEXT_W)
     if needs_scroll and tw > 0:
         gap_px  = 40
         strip_w = tw + gap_px + tw
@@ -858,22 +864,45 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
                     else:
                         break
                 if last_mid == 0:
-                    l1 = _truncate_to_fit(draw, words[0] if words else text, active_font, max_w)
-                    l2 = ""
+                    needs_marquee = True
+                    l1, l2 = text, ""
                 else:
                     l1     = " ".join(words[:last_mid])
                     l2_raw = " ".join(words[last_mid:])
-                    l2     = _truncate_to_fit(draw, l2_raw, active_font, max_w) if l2_raw else ""
-                n_sub       = 2 if l2 else 1
-                gap2        = 2
-                total_block = th_sub * n_sub + gap2 * (n_sub - 1)
-                center_y    = y_top + lh // 2
-                sub_y       = center_y - total_block // 2
-                cx          = int(explicit_x) if explicit_x is not None else W // 2
-                for sub_text in ([l1, l2] if l2 else [l1]):
-                    stw = _text_size(draw, sub_text, active_font)[0]
-                    draw.text((cx - stw // 2, sub_y), sub_text, font=active_font, fill=color)
-                    sub_y += th_sub + gap2
+                    needs_marquee = bool(l2_raw and _text_size(draw, l2_raw, active_font)[0] > max_w)
+                    if not needs_marquee:
+                        l2 = _truncate_to_fit(draw, l2_raw, active_font, max_w) if l2_raw else ""
+
+                scroll_slot = f"{page_name}_{i}"
+                if needs_marquee:
+                    tw_s, th_s = _text_size(draw, text, active_font)
+                    offset, _  = _tick_scroll(scroll_slot, text, tw_s, max_w)
+                    center_y   = y_top + lh // 2
+                    scroll_y   = center_y - th_s // 2
+                    cx         = int(explicit_x) if explicit_x is not None else W // 2
+                    paste_x    = cx - max_w // 2
+                    if tw_s > 0:
+                        gap_px  = 40
+                        strip_w = tw_s + gap_px + tw_s
+                        strip   = Image.new("RGB", (strip_w, th_s + 2), (0, 0, 0))
+                        sd      = ImageDraw.Draw(strip)
+                        sd.text((0, 0),              text, font=active_font, fill=color)
+                        sd.text((tw_s + gap_px, 0),  text, font=active_font, fill=color)
+                        off    = int(offset) % (tw_s + gap_px)
+                        crop_w = min(max_w, strip_w - off)
+                        if crop_w > 0:
+                            img.paste(strip.crop((off, 0, off + crop_w, th_s + 2)), (paste_x, scroll_y))
+                else:
+                    n_sub       = 2 if l2 else 1
+                    gap2        = 2
+                    total_block = th_sub * n_sub + gap2 * (n_sub - 1)
+                    center_y    = y_top + lh // 2
+                    sub_y       = center_y - total_block // 2
+                    cx          = int(explicit_x) if explicit_x is not None else W // 2
+                    for sub_text in ([l1, l2] if l2 else [l1]):
+                        stw = _text_size(draw, sub_text, active_font)[0]
+                        draw.text((cx - stw // 2, sub_y), sub_text, font=active_font, fill=color)
+                        sub_y += th_sub + gap2
 
         elif ln.get("wrap_left") and not right and not (i == 0 and icon_name):
             x_start = int(explicit_x) if explicit_x is not None else lm

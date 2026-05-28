@@ -28,7 +28,7 @@ from pages import (
 )
 from render import (
     load_layout, render_page_rgb565, solid_frame,
-    invalidate_layout_cache, spotify_needs_scroll,
+    invalidate_layout_cache, spotify_needs_scroll, calendar_needs_scroll,
 )
 
 _SPOTIFY_SCROLL_TICK = 1.0  # seconds between re-renders when scrolling
@@ -361,7 +361,8 @@ def main():
                 frame = None
             if frame:
                 _write_frame(frame, fb)
-            is_scroll = page.get("_name") == "spotify" and spotify_needs_scroll()
+            is_scroll = (page.get("_name") == "spotify" and spotify_needs_scroll()) or \
+                        (page.get("_name") == "calendar" and calendar_needs_scroll())
             wait = _SPOTIFY_SCROLL_TICK if is_scroll else dwell
             try:
                 delta = _nav_q.get(timeout=wait)
