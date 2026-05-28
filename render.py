@@ -613,11 +613,8 @@ _current_scroll_zones: list = []
 
 # Spotify fast-path cache (separate from general page cache due to progress zone)
 _spotify_render_cache: dict = {
-    "key": None,       # (track, artist, album, art_url, ART_SIZE, W, H)
-    "bg_arr": None,    # uint16 H×W numpy array — static bg, title row blanked
-    "strip_arr": None, # uint16 (th+2)×strip_w
-    "title_w": 0, "strip_w": 0,
-    "TEXT_X": 0, "track_y": 0, "TEXT_W": 0, "th": 0,
+    "key": None,    # (track, artist, album, art_url, ART_SIZE, W, H)
+    "bg_arr": None, # uint16 H×W — complete static frame (title already drawn)
     "BAR_Y": 0, "T_Y": 0, "EDGE": 0,
     "f_time": None, "BG": None, "GREEN": None, "MUTED": None, "DIM": None,
 }
@@ -771,33 +768,43 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, TEXT_W)
     album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  TEXT_W)
 
-    # Vertically center the text block within the art area
+    # Word-wrap the track title to 2 lines instead of scrolling
     _, th = _text_size(draw, track  or " ", f_track)
     _, ah = _text_size(draw, artist or " ", f_artist)
     _, lh = _text_size(draw, album  or " ", f_album)
-    block_h = th + GAP + ah + GAP + lh
+
+    title_line1 = title_line2 = ""
+    if track:
+        tw, _ = _text_size(draw, track, f_track)
+        if tw <= TEXT_W:
+            title_line1 = track
+        else:
+            words = track.split()
+            last_fit = 0
+            for i in range(1, len(words) + 1):
+                if _text_size(draw, " ".join(words[:i]), f_track)[0] <= TEXT_W:
+                    last_fit = i
+                else:
+                    break
+            if last_fit == 0:
+                title_line1 = _truncate_to_fit(draw, track, f_track, TEXT_W)
+            else:
+                title_line1 = " ".join(words[:last_fit])
+                title_line2 = _truncate_to_fit(draw, " ".join(words[last_fit:]), f_track, TEXT_W)
+
+    TITLE_GAP = 2
+    title_h = th + (TITLE_GAP + th if title_line2 else 0)
+    block_h = title_h + GAP + ah + GAP + lh
     ty0 = art_y + max(0, (ART_SIZE - block_h) // 2)
 
     track_y  = ty0
-    artist_y = ty0 + th + GAP
-    album_y  = ty0 + th + GAP + ah + GAP
+    artist_y = ty0 + title_h + GAP
+    album_y  = ty0 + title_h + GAP + ah + GAP
 
-    # Track title — scroll if too wide
-    tw, _ = _text_size(draw, track, f_track) if track else (0, 0)
-    offset, needs_scroll = _tick_scroll("spotify", track, tw, TEXT_W)
-    if needs_scroll and tw > 0:
-        gap_px  = _SCROLL_GAP
-        strip_w = tw + gap_px + tw
-        strip   = Image.new("RGB", (strip_w, th + 2), BG)
-        sd      = ImageDraw.Draw(strip)
-        sd.text((0, 0),           track, font=f_track, fill=WHITE)
-        sd.text((tw + gap_px, 0), track, font=f_track, fill=WHITE)
-        off    = int(offset) % (tw + gap_px)
-        crop_w = min(TEXT_W, strip_w - off)
-        if crop_w > 0:
-            img.paste(strip.crop((off, 0, off + crop_w, th + 2)), (TEXT_X, track_y))
-    elif track:
-        draw.text((TEXT_X, track_y), track, font=f_track, fill=WHITE)
+    if title_line1:
+        draw.text((TEXT_X, track_y), title_line1, font=f_track, fill=WHITE)
+    if title_line2:
+        draw.text((TEXT_X, track_y + th + TITLE_GAP), title_line2, font=f_track, fill=WHITE)
 
     if artist:
         draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=MUTED)
@@ -863,71 +870,17 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         sc = _spotify_render_cache
 
         if sc["key"] != cache_key:
-            # Full PIL render to prime the cache
             img = render_spotify_page(page, layout)
-
-            # Measure title geometry (same logic as render_spotify_page)
-            tmp_draw = ImageDraw.Draw(img)
-            f_track  = _get_font(18, layout)
-            f_artist = _get_font(14, layout)
-            f_album  = _get_font(13, layout)
-            art_y    = CONTENT_Y + (CONTENT_H - ART_SIZE) // 2
-            _, th  = _text_size(tmp_draw, track  or " ", f_track)
-            _, ah  = _text_size(tmp_draw, artist or " ", f_artist)
-            _, lh_ = _text_size(tmp_draw, album  or " ", f_album)
-            GAP     = 7
-            block_h = th + GAP + ah + GAP + lh_
-            ty0     = art_y + max(0, (ART_SIZE - block_h) // 2)
-            track_y = ty0
-
-            # Build scroll strip if needed; only blank the title row when scrolling
-            tw, _ = _text_size(tmp_draw, track, f_track) if track else (0, 0)
-            TITLE_C, ARTIST_C, ALBUM_C = _adaptive_text_colors(BG)
-            bg = img.copy()
-            if tw > TEXT_W:
-                # Blank title row so the scroll strip fills it in each tick
-                ImageDraw.Draw(bg).rectangle(
-                    [TEXT_X, track_y, TEXT_X + TEXT_W, track_y + th + 2], fill=BG)
-                gap_px  = _SCROLL_GAP
-                strip_w = tw + gap_px + tw
-                strip   = Image.new("RGB", (strip_w, th + 2), BG)
-                sd      = ImageDraw.Draw(strip)
-                sd.text((0, 0),           track, font=f_track, fill=TITLE_C)
-                sd.text((tw + gap_px, 0), track, font=f_track, fill=TITLE_C)
-                sc["strip_arr"] = _pil_to_arr(strip)
-                sc["title_w"]   = tw
-                sc["strip_w"]   = strip_w
-            else:
-                # Title fits — keep it in bg_arr, no strip needed
-                sc["strip_arr"] = None
-                sc["title_w"]   = tw
-                sc["strip_w"]   = tw
-
+            _, ARTIST_C, _ = _adaptive_text_colors(BG)
             sc.update(
-                key=cache_key, bg_arr=_pil_to_arr(bg),
-                TEXT_X=TEXT_X, track_y=track_y, TEXT_W=TEXT_W, th=th,
+                key=cache_key, bg_arr=_pil_to_arr(img),
                 BAR_Y=H - BAR_ZONE + 4, T_Y=H - BAR_ZONE + 4 + 7, EDGE=EDGE,
                 f_time=_get_font(10, layout),
                 BG=BG, GREEN=(29, 185, 84), MUTED=ARTIST_C, DIM=(51, 51, 51),
             )
 
-        # Compose frame from cache
+        # Compose frame from cache — title is static, only progress zone updates
         frame = sc["bg_arr"].copy()
-
-        # Scroll strip
-        if sc["strip_arr"] is not None:
-            off, needs = _tick_scroll("spotify", track, sc["title_w"], sc["TEXT_W"])
-            if needs:
-                sa    = sc["strip_arr"]
-                sw    = sc["strip_w"]
-                ty    = sc["track_y"];  tx   = sc["TEXT_X"]
-                tw_d  = sc["TEXT_W"];   th_s = sc["th"] + 2
-                avail = sw - off
-                if avail >= tw_d:
-                    frame[ty:ty+th_s, tx:tx+tw_d] = sa[:, off:off+tw_d]
-                else:
-                    frame[ty:ty+th_s, tx:tx+avail]      = sa[:, off:]
-                    frame[ty:ty+th_s, tx+avail:tx+tw_d] = sa[:, :tw_d-avail]
 
         # Progress zone (small PIL image, height = BAR_ZONE rows)
         BAR_ZONE_ = BAR_ZONE

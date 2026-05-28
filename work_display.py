@@ -34,7 +34,14 @@ from render import (
     prefetch_spotify_art,
 )
 
-_SPOTIFY_SCROLL_TICK = 0.05  # seconds between re-renders when scrolling (20fps)
+_SPOTIFY_SCROLL_TICK = 0.067  # seconds between re-renders (≈15 fps)
+
+# Set True while the Spotify page is on screen; fetch threads back off to avoid GIL spikes
+_spotify_page_active: bool = False
+
+# Pre-render cache: id(page) → rgb565 bytes rendered in background
+_prerender_cache:   dict = {}
+_prerender_started: set  = set()
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
@@ -47,6 +54,21 @@ def _write_frame(data: bytes, fb_path: str):
             fb.write(data)
     except OSError as exc:
         print(f"[fb] write failed: {exc}")
+
+
+def _launch_prerender(page: dict, layout: dict, rotate_180: bool) -> None:
+    """Warm numpy caches for `page` in a background thread (one-shot per page object)."""
+    pid = id(page)
+    if pid in _prerender_started:
+        return
+    _prerender_started.add(pid)
+    def _work():
+        try:
+            data = render_page_rgb565(page, layout, rotate_180=rotate_180)
+            _prerender_cache[pid] = data
+        except Exception as exc:
+            print(f"[prerender] {exc}")
+    threading.Thread(target=_work, daemon=True).start()
 
 
 # ── Shutdown ────────────────────────────────────────────────────────────────────────
@@ -108,9 +130,15 @@ def _start_button_threads(cfg: dict, layout: dict,
 def _start_fetch_threads(store: DataStore):
     cfg = store.cfg
 
+    def _wait_for_spotify_clear():
+        """Block until the Spotify page is no longer active."""
+        while _spotify_page_active:
+            time.sleep(0.5)
+
     def _weather_loop():
         from data import fetch_weather
         while True:
+            _wait_for_spotify_clear()
             try:
                 store.weather.set(fetch_weather(store))
                 time.sleep(cfg["weather"]["update_interval_s"])
@@ -121,6 +149,7 @@ def _start_fetch_threads(store: DataStore):
     def _commute_loop():
         from data import fetch_commute, in_commute_window
         while True:
+            _wait_for_spotify_clear()
             if in_commute_window(cfg):
                 try:
                     store.commute.set(fetch_commute(store))
@@ -134,6 +163,7 @@ def _start_fetch_threads(store: DataStore):
         from data import fetch_ics_events, fetch_work_state
         interval = cfg["calendar"]["update_interval_s"]
         while True:
+            _wait_for_spotify_clear()
             ok = True
             try:
                 store.ics_events.set(fetch_ics_events(store))
@@ -154,6 +184,7 @@ def _start_fetch_threads(store: DataStore):
     def _aqi_loop():
         from data import fetch_aqi
         while True:
+            _wait_for_spotify_clear()
             try:
                 store.aqi.set(fetch_aqi(store))
                 time.sleep(cfg["aqi"]["update_interval_s"])
@@ -164,6 +195,7 @@ def _start_fetch_threads(store: DataStore):
     def _alerts_loop():
         from data import fetch_alerts
         while True:
+            _wait_for_spotify_clear()
             try:
                 store.alerts.set(fetch_alerts(store))
                 time.sleep(cfg["alerts"]["update_interval_s"])
@@ -174,13 +206,21 @@ def _start_fetch_threads(store: DataStore):
     def _spotify_loop():
         from data import fetch_spotify
         interval = cfg.get("spotify", {}).get("update_interval_s", 10)
+        _last_track_key = None
         while True:
             try:
                 data = fetch_spotify(store)
                 store.spotify.set(data)
-                # Invalidate display cache so Spotify page appears/disappears promptly
-                store.display.fetched_at = 0
-                # Pre-cache album art so the first render is instant (no HTTP stall)
+                # Only invalidate display cache when track or playing state changes.
+                # Keeping fetched_at stable means the page dict keeps the same id()
+                # between polls → the fast-path numpy cache stays warm.
+                track_key = (
+                    (data or {}).get("track"),
+                    (data or {}).get("is_playing"),
+                )
+                if track_key != _last_track_key:
+                    _last_track_key = track_key
+                    store.display.fetched_at = 0
                 if data and data.get("art_url"):
                     prefetch_spotify_art(data["art_url"])
             except Exception as exc:
@@ -239,6 +279,8 @@ def main():
     rot = cfg["display"].get("rotation", 0)
     default_dwell = cfg["display"].get("page_dwell_s", 8)
     font_path = cfg_module.resolve_font_path(cfg)
+
+    global _spotify_page_active
 
     layout = load_layout(font_path, display_w=W, display_h=H)
 
@@ -362,21 +404,28 @@ def main():
             _stats_wake.wait(timeout=2)
             _stats_wake.clear()
         else:
+            _pn = _pname
+            _spotify_page_active = (_pn == "spotify")
+            pid = id(page)
+            cached_frame = _prerender_cache.pop(pid, None)
             try:
-                frame = render_page_rgb565(page, layout, rotate_180=(rot == 180))
+                frame = cached_frame if cached_frame is not None else \
+                        render_page_rgb565(page, layout, rotate_180=(rot == 180))
             except Exception as exc:
                 print(f"[render] {exc}")
                 frame = None
             if frame:
                 _write_frame(frame, fb)
-            _pn = page.get("_name", "")
             scroll_active = (_pn == "spotify" and spotify_needs_scroll()) or \
                             (_pn == "calendar" and calendar_needs_scroll())
             scroll_done   = (_pn == "spotify" and spotify_scroll_complete()) or \
                             (_pn == "calendar" and calendar_scroll_complete())
             elapsed = time.time() - _page_entered
+            # Pre-render the next page during the first tick (text is static during initial pause)
+            if _pn == "spotify" and elapsed < 0.2 and len(pages) > 1:
+                _launch_prerender(pages[(idx + 1) % len(pages)], layout, rot == 180)
             if _pn == "spotify":
-                # Always fast-tick Spotify — progress bar needs live updates even without scroll
+                # Always fast-tick Spotify — progress bar needs live updates
                 wait = _SPOTIFY_SCROLL_TICK
             elif scroll_active and not scroll_done:
                 wait = _SPOTIFY_SCROLL_TICK
