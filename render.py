@@ -5,6 +5,7 @@ import copy
 import io
 import math
 import os
+import time as _time_mod
 
 try:
     import requests as _requests
@@ -534,28 +535,63 @@ def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
 
 
 def _album_bg_color(art_img: "Image.Image") -> tuple:
-    """Sample the album art and return a darkened tint safe for white text."""
+    """Sample album art and return a darkened tint safe for white text."""
     import colorsys
     r, g, b = art_img.resize((1, 1), Image.LANCZOS).getpixel((0, 0))
     h, s, v = colorsys.rgb_to_hsv(r / 255, g / 255, b / 255)
-    v2 = min(v * 0.5, 0.28)   # darken: cap at 28% brightness
-    s2 = min(s * 1.2, 1.0)    # slight saturation boost for vividness
+    v2 = min(v * 0.5, 0.28)
+    s2 = min(s * 1.2, 1.0)
     r2, g2, b2 = colorsys.hsv_to_rgb(h, s2, v2)
     return (int(r2 * 255), int(g2 * 255), int(b2 * 255))
 
 
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
-    """Approximate the Spotify circle icon: green disc with 3 radiating arcs."""
+    """Approximate Spotify circle icon: green disc with 3 radiating arcs."""
     r = size // 2
     cx, cy = x + r, y + r
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
     off = max(1, r // 3)
     ac_x, ac_y = cx - off, cy + off
-    # Arcs go clockwise from upper-right through right to lower-right,
-    # offset toward lower-left so they radiate outward like the Spotify logo
     for arc_r in [max(1, r * 2 // 5), max(2, r * 3 // 5), max(2, r * 4 // 5)]:
         bb = [ac_x - arc_r, ac_y - arc_r, ac_x + arc_r, ac_y + arc_r]
         draw.arc(bb, start=325, end=55, fill=(255, 255, 255), width=1)
+
+
+# ── Spotify scroll state ──────────────────────────────────────────────────────────────
+
+_scroll_state: dict = {
+    "track": "", "offset": 0.0, "needs_scroll": False,
+    "entered_at": 0.0, "last_tick": 0.0,
+}
+_SCROLL_SPEED   = 30.0  # pixels per second
+_SCROLL_PAUSE_S = 1.5   # seconds to hold before starting to scroll
+
+
+def _tick_scroll(track: str, title_w: int, text_w: int) -> tuple:
+    """Advance scroll offset. Returns (pixel_offset, needs_scroll)."""
+    global _scroll_state
+    now  = _time_mod.time()
+    needs = title_w > text_w
+    _scroll_state["needs_scroll"] = needs
+    if not needs:
+        return 0, False
+    if track != _scroll_state["track"]:
+        _scroll_state.update(track=track, offset=0.0, needs_scroll=True,
+                             entered_at=now, last_tick=now)
+        return 0, True
+    if now - _scroll_state["entered_at"] < _SCROLL_PAUSE_S:
+        _scroll_state["last_tick"] = now
+        return 0, True
+    dt = now - _scroll_state["last_tick"]
+    _scroll_state["last_tick"] = now
+    gap   = 40
+    total = title_w + gap
+    _scroll_state["offset"] = (_scroll_state["offset"] + dt * _SCROLL_SPEED) % total
+    return int(_scroll_state["offset"]), True
+
+
+def spotify_needs_scroll() -> bool:
+    return bool(_scroll_state.get("needs_scroll"))
 
 
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
@@ -569,65 +605,95 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     DIM          = (51,  51,  51)
     ALB_COLOR    = (102, 102, 102)
 
-    # ── Album art (fetch early so we can derive bg color) ────────────────────
-    ART_SIZE = 110
-    art_x = (W - ART_SIZE) // 2
-    art_y = 40
-    art_url = page.get("art_url")
-    art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+    HEADER_H  = 28
+    BAR_ZONE  = 14   # px reserved at bottom for progress bar + time labels
+    CONTENT_Y = HEADER_H + 1
+    CONTENT_H = H - CONTENT_Y - BAR_ZONE  # ~197 px
+
+    # ── Album art (left, fetch early for bg color) ────────────────────────────
+    ART_PAD  = 4
+    ART_SIZE = min(CONTENT_H - ART_PAD * 2, 150)
+    art_x    = ART_PAD
+    art_y    = CONTENT_Y + (CONTENT_H - ART_SIZE) // 2
+    art_url  = page.get("art_url")
+    art_img  = _fetch_album_art(art_url, ART_SIZE) if art_url else None
 
     BG = _album_bg_color(art_img) if art_img else SPOTIFY_DARK
 
     img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    # ── Header ───────────────────────────────────────────────────────────────
+    # ── Header ────────────────────────────────────────────────────────────────
     f_label = _get_font(12, layout)
     f_logo  = _get_font(10, layout)
-
     draw.text((16, 8), "NOW PLAYING", font=f_label, fill=MUTED)
 
-    # Spotify icon + wordmark, right-aligned
     ICON_SIZE = 14
     spot_text = "Spotify"
     sw, sh = _text_size(draw, spot_text, f_logo)
-    logo_x = W - 6 - sw - 3 - ICON_SIZE
-    icon_y = 4 + (18 - ICON_SIZE) // 2
+    logo_x  = W - 6 - sw - 3 - ICON_SIZE
+    icon_y  = (HEADER_H - ICON_SIZE) // 2
     _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
-    draw.text((logo_x + ICON_SIZE + 3, 4 + (18 - sh) // 2),
+    draw.text((logo_x + ICON_SIZE + 3, (HEADER_H - sh) // 2),
               spot_text, font=f_logo, fill=WHITE)
+    draw.line([(0, HEADER_H), (W, HEADER_H)], fill=DIM, width=1)
 
-    draw.line([(0, 28), (W, 28)], fill=DIM, width=1)
-
-    # ── Album art ────────────────────────────────────────────────────────────
+    # ── Album art ─────────────────────────────────────────────────────────────
     draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
                    fill=(35, 35, 35), outline=DIM)
     if art_img:
         img.paste(art_img, (art_x, art_y))
 
-    # ── Text (centered) ──────────────────────────────────────────────────────
-    MAX_W    = 288
-    f_track  = _get_font(22, layout)
-    f_artist = _get_font(16, layout)
-    f_album  = _get_font(14, layout)
+    # ── Track / artist / album (right of art) ────────────────────────────────
+    TEXT_X = art_x + ART_SIZE + 8
+    TEXT_W = W - TEXT_X - 4
+    GAP    = 7
 
-    track  = _truncate_to_fit(draw, page.get("track",  "") or "", f_track,  MAX_W)
-    artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, MAX_W)
-    album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  MAX_W)
+    f_track  = _get_font(18, layout)
+    f_artist = _get_font(14, layout)
+    f_album  = _get_font(13, layout)
 
-    for text, font, y, color in (
-        (track,  f_track,  158, WHITE),
-        (artist, f_artist, 184, MUTED),
-        (album,  f_album,  206, ALB_COLOR),
-    ):
-        if text:
-            tw, _ = _text_size(draw, text, font)
-            draw.text(((W - tw) // 2, y), text, font=font, fill=color)
+    track  = page.get("track",  "") or ""
+    artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, TEXT_W)
+    album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  TEXT_W)
 
-    # ── Progress bar with position / remaining time ───────────────────────────
-    BAR_Y      = 232
-    f_time     = _get_font(10, layout)
-    SIDE_GAP   = 4
+    # Vertically center the text block within the art area
+    _, th = _text_size(draw, track  or " ", f_track)
+    _, ah = _text_size(draw, artist or " ", f_artist)
+    _, lh = _text_size(draw, album  or " ", f_album)
+    block_h = th + GAP + ah + GAP + lh
+    ty0 = art_y + max(0, (ART_SIZE - block_h) // 2)
+
+    track_y  = ty0
+    artist_y = ty0 + th + GAP
+    album_y  = ty0 + th + GAP + ah + GAP
+
+    # Track title — scroll if too wide
+    tw, _ = _text_size(draw, track, f_track) if track else (0, 0)
+    offset, needs_scroll = _tick_scroll(track, tw, TEXT_W)
+    if needs_scroll and tw > 0:
+        gap_px  = 40
+        strip_w = tw + gap_px + tw
+        strip   = Image.new("RGB", (strip_w, th + 2), BG)
+        sd      = ImageDraw.Draw(strip)
+        sd.text((0, 0),          track, font=f_track, fill=WHITE)
+        sd.text((tw + gap_px, 0), track, font=f_track, fill=WHITE)
+        off    = int(offset) % (tw + gap_px)
+        crop_w = min(TEXT_W, strip_w - off)
+        if crop_w > 0:
+            img.paste(strip.crop((off, 0, off + crop_w, th + 2)), (TEXT_X, track_y))
+    elif track:
+        draw.text((TEXT_X, track_y), track, font=f_track, fill=WHITE)
+
+    if artist:
+        draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=MUTED)
+    if album:
+        draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=ALB_COLOR)
+
+    # ── Progress bar with elapsed / remaining ────────────────────────────────
+    BAR_Y       = H - 8
+    f_time      = _get_font(10, layout)
+    SIDE_GAP    = 4
     progress_ms = page.get("progress_ms") or 0
     duration_ms = page.get("duration_ms") or 0
 
@@ -637,11 +703,11 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     if duration_ms > 0:
         pos_str = _fmt_ms(progress_ms)
-        rem_str = f"-{_fmt_ms(max(0, duration_ms - progress_ms))}"
-        pw, ph = _text_size(draw, pos_str, f_time)
-        rw, rh = _text_size(draw, rem_str, f_time)
-        BAR_X0 = pw + SIDE_GAP * 2
-        BAR_X1 = W - rw - SIDE_GAP * 2
+        rem_str = _fmt_ms(max(0, duration_ms - progress_ms))
+        pw, ph  = _text_size(draw, pos_str, f_time)
+        rw, rh  = _text_size(draw, rem_str, f_time)
+        BAR_X0  = pw + SIDE_GAP * 2
+        BAR_X1  = W - rw - SIDE_GAP * 2
         draw.text((SIDE_GAP, BAR_Y - ph // 2), pos_str, font=f_time, fill=MUTED)
         draw.text((W - rw - SIDE_GAP, BAR_Y - rh // 2), rem_str, font=f_time, fill=MUTED)
     else:

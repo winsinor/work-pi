@@ -28,8 +28,10 @@ from pages import (
 )
 from render import (
     load_layout, render_page_rgb565, solid_frame,
-    invalidate_layout_cache,
+    invalidate_layout_cache, spotify_needs_scroll,
 )
+
+_SPOTIFY_SCROLL_TICK = 1.0  # seconds between re-renders when scrolling
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
@@ -307,6 +309,7 @@ def main():
         print("[main] first fetch timed out, continuing anyway")
 
     idx = 0
+    _page_entered = time.time()
     while True:
         layout = load_layout(font_path, display_w=W, display_h=H)
 
@@ -358,13 +361,20 @@ def main():
                 frame = None
             if frame:
                 _write_frame(frame, fb)
+            is_scroll = page.get("_name") == "spotify" and spotify_needs_scroll()
+            wait = _SPOTIFY_SCROLL_TICK if is_scroll else dwell
             try:
-                delta = _nav_q.get(timeout=dwell)
+                delta = _nav_q.get(timeout=wait)
                 idx = (idx + delta) % len(pages)
+                _page_entered = time.time()
+                store.display.fetched_at = 0.0
             except queue.Empty:
-                idx = (idx + 1) % len(pages)
-
-        store.display.fetched_at = 0.0
+                if is_scroll and time.time() - _page_entered < dwell:
+                    pass  # scroll tick — re-render same page, keep cache
+                else:
+                    idx = (idx + 1) % len(pages)
+                    _page_entered = time.time()
+                    store.display.fetched_at = 0.0
 
 
 if __name__ == "__main__":
