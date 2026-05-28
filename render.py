@@ -880,15 +880,14 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
             ty0     = art_y + max(0, (ART_SIZE - block_h) // 2)
             track_y = ty0
 
-            # Build bg by blanking the title row with BG color
-            bg = img.copy()
-            ImageDraw.Draw(bg).rectangle(
-                [TEXT_X, track_y, TEXT_X + TEXT_W, track_y + th + 2], fill=BG)
-
-            # Build scroll strip if needed
+            # Build scroll strip if needed; only blank the title row when scrolling
             tw, _ = _text_size(tmp_draw, track, f_track) if track else (0, 0)
             TITLE_C, ARTIST_C, ALBUM_C = _adaptive_text_colors(BG)
+            bg = img.copy()
             if tw > TEXT_W:
+                # Blank title row so the scroll strip fills it in each tick
+                ImageDraw.Draw(bg).rectangle(
+                    [TEXT_X, track_y, TEXT_X + TEXT_W, track_y + th + 2], fill=BG)
                 gap_px  = _SCROLL_GAP
                 strip_w = tw + gap_px + tw
                 strip   = Image.new("RGB", (strip_w, th + 2), BG)
@@ -899,6 +898,7 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
                 sc["title_w"]   = tw
                 sc["strip_w"]   = strip_w
             else:
+                # Title fits — keep it in bg_arr, no strip needed
                 sc["strip_arr"] = None
                 sc["title_w"]   = tw
                 sc["strip_w"]   = tw
