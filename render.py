@@ -534,6 +534,12 @@ def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
         return None
 
 
+def prefetch_spotify_art(url: str, size: int = 150) -> None:
+    """Fetch and cache album art before the Spotify page first renders."""
+    if url:
+        _fetch_album_art(url, size)
+
+
 def _album_bg_color(art_img: "Image.Image") -> tuple:
     """Sample album art and return a darkened tint safe for white text."""
     import colorsys
@@ -546,15 +552,18 @@ def _album_bg_color(art_img: "Image.Image") -> tuple:
 
 
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
-    """Approximate Spotify circle icon: green disc with 3 radiating arcs."""
+    """Approximate Spotify circle icon: green disc with 3 arcs concentric from lower-left."""
     r = size // 2
     cx, cy = x + r, y + r
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
-    off = max(1, r // 3)
-    ac_x, ac_y = cx - off, cy + off
-    for arc_r in [max(1, r * 2 // 5), max(2, r * 3 // 5), max(2, r * 4 // 5)]:
+    w = max(1, size // 8)
+    # Arc centre at lower-left; arcs 280°–335° sweep the upper-right portion,
+    # producing three tilted horizontal waves like the real Spotify logo.
+    ac_x = x + size // 5
+    ac_y = y + size
+    for arc_r in [size * 9 // 22, size * 13 // 22, size * 17 // 22]:
         bb = [ac_x - arc_r, ac_y - arc_r, ac_x + arc_r, ac_y + arc_r]
-        draw.arc(bb, start=325, end=55, fill=(255, 255, 255), width=1)
+        draw.arc(bb, start=280, end=335, fill=(255, 255, 255), width=w)
 
 
 # ── Spotify scroll state ──────────────────────────────────────────────────────────────
@@ -629,8 +638,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     DIM          = (51,  51,  51)
     ALB_COLOR    = (102, 102, 102)
 
-    HEADER_H  = 56
-    BAR_ZONE  = 14   # px reserved at bottom for progress bar + time labels
+    HEADER_H  = 28
+    BAR_ZONE  = 22   # px reserved at bottom for progress bar + time labels below
     CONTENT_Y = HEADER_H + 1
     CONTENT_H = H - CONTENT_Y - BAR_ZONE
 
@@ -648,12 +657,12 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    f_label = _get_font(20, layout)
-    f_logo  = _get_font(17, layout)
-    _, lbl_h = _text_size(draw, "NOW PLAYING", f_label)
-    draw.text((16, (HEADER_H - lbl_h) // 2), "NOW PLAYING", font=f_label, fill=MUTED)
+    f_label = _get_font(14, layout)
+    f_logo  = _get_font(12, layout)
+    _, lbl_h = _text_size(draw, "Now Playing", f_label)
+    draw.text((12, (HEADER_H - lbl_h) // 2), "Now Playing", font=f_label, fill=MUTED)
 
-    ICON_SIZE = 22
+    ICON_SIZE = 16
     spot_text = "Spotify"
     sw, sh = _text_size(draw, spot_text, f_logo)
     logo_x  = W - 8 - sw - 4 - ICON_SIZE
@@ -716,7 +725,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=ALB_COLOR)
 
     # ── Progress bar with elapsed / remaining ────────────────────────────────
-    BAR_Y       = H - 8
+    BAR_Y       = H - BAR_ZONE + 4   # bar sits near top of the reserved zone
+    T_Y         = BAR_Y + 6          # time text sits just below the bar
     f_time      = _get_font(10, layout)
     SIDE_GAP    = 4
     duration_ms = page.get("duration_ms") or 0
@@ -726,23 +736,17 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         s = max(0, ms) // 1000
         return f"{s // 60}:{s % 60:02d}"
 
-    if duration_ms > 0:
-        pos_str = _fmt_ms(current_ms)
-        rem_str = _fmt_ms(max(0, duration_ms - current_ms))
-        pw, ph  = _text_size(draw, pos_str, f_time)
-        rw, rh  = _text_size(draw, rem_str, f_time)
-        BAR_X0  = pw + SIDE_GAP * 2
-        BAR_X1  = W - rw - SIDE_GAP * 2
-        draw.text((SIDE_GAP, BAR_Y - ph // 2), pos_str, font=f_time, fill=MUTED)
-        draw.text((W - rw - SIDE_GAP, BAR_Y - rh // 2), rem_str, font=f_time, fill=MUTED)
-    else:
-        BAR_X0, BAR_X1 = 16, W - 16
-
+    BAR_X0, BAR_X1 = 6, W - 6
     draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
     if duration_ms > 0:
         fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(current_ms / duration_ms, 1.0))
         if fill_x > BAR_X0:
             draw.line([(BAR_X0, BAR_Y), (fill_x, BAR_Y)], fill=GREEN, width=4)
+        pos_str = _fmt_ms(current_ms)
+        rem_str = _fmt_ms(max(0, duration_ms - current_ms))
+        rw, _   = _text_size(draw, rem_str, f_time)
+        draw.text((SIDE_GAP, T_Y), pos_str, font=f_time, fill=MUTED)
+        draw.text((W - rw - SIDE_GAP, T_Y), rem_str, font=f_time, fill=MUTED)
 
     return img
 

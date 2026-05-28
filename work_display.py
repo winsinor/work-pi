@@ -29,6 +29,7 @@ from pages import (
 from render import (
     load_layout, render_page_rgb565, solid_frame,
     invalidate_layout_cache, spotify_needs_scroll, calendar_needs_scroll,
+    prefetch_spotify_art,
 )
 
 _SPOTIFY_SCROLL_TICK = 0.3  # seconds between re-renders when scrolling
@@ -173,9 +174,13 @@ def _start_fetch_threads(store: DataStore):
         interval = cfg.get("spotify", {}).get("update_interval_s", 10)
         while True:
             try:
-                store.spotify.set(fetch_spotify(store))
+                data = fetch_spotify(store)
+                store.spotify.set(data)
                 # Invalidate display cache so Spotify page appears/disappears promptly
                 store.display.fetched_at = 0
+                # Pre-cache album art so the first render is instant (no HTTP stall)
+                if data and data.get("art_url"):
+                    prefetch_spotify_art(data["art_url"])
             except Exception as exc:
                 print(f"[spotify] {exc}")
             time.sleep(interval)
