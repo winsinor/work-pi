@@ -793,18 +793,21 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
                 title_line2 = _truncate_to_fit(draw, " ".join(words[last_fit:]), f_track, TEXT_W)
 
     TITLE_GAP = 2
-    title_h = th + (TITLE_GAP + th if title_line2 else 0)
-    block_h = title_h + GAP + ah + GAP + lh
-    ty0 = art_y + max(0, (ART_SIZE - block_h) // 2)
-
+    # Anchor artist/album using a 1-line block so their positions are stable.
+    # When 2 title lines are needed, line 2 sits at track_y and line 1 floats
+    # up above it — so nothing below shifts.
+    block_h  = th + GAP + ah + GAP + lh
+    ty0      = art_y + max(0, (ART_SIZE - block_h) // 2)
     track_y  = ty0
-    artist_y = ty0 + title_h + GAP
-    album_y  = ty0 + title_h + GAP + ah + GAP
+    artist_y = ty0 + th + GAP
+    album_y  = ty0 + th + GAP + ah + GAP
 
-    if title_line1:
-        draw.text((TEXT_X, track_y), title_line1, font=f_track, fill=WHITE)
     if title_line2:
-        draw.text((TEXT_X, track_y + th + TITLE_GAP), title_line2, font=f_track, fill=WHITE)
+        # Line 2 occupies the normal title row; line 1 shifts up
+        draw.text((TEXT_X, track_y - th - TITLE_GAP), title_line1, font=f_track, fill=WHITE)
+        draw.text((TEXT_X, track_y),                  title_line2, font=f_track, fill=WHITE)
+    elif title_line1:
+        draw.text((TEXT_X, track_y), title_line1, font=f_track, fill=WHITE)
 
     if artist:
         draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=MUTED)
