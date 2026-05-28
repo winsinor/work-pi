@@ -669,7 +669,7 @@ def fetch_spotify(store: DataStore) -> dict | None:
     artists   = ", ".join(a.get("name", "") for a in item.get("artists", []))
     album     = item.get("album") or {}
     images    = sorted(album.get("images") or [], key=lambda x: x.get("width", 0))
-    art_url   = next((img["url"] for img in images if img.get("width", 0) >= 64), None)
+    art_url   = next((img["url"] for img in images if img.get("width", 0) >= 150), None)
     if not art_url and images:
         art_url = images[-1]["url"]
     return {
