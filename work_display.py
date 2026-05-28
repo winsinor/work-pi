@@ -34,7 +34,7 @@ from render import (
     prefetch_spotify_art,
 )
 
-_SPOTIFY_SCROLL_TICK = 0.2  # seconds between re-renders when scrolling
+_SPOTIFY_SCROLL_TICK = 0.05  # seconds between re-renders when scrolling (20fps)
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}

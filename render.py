@@ -220,6 +220,10 @@ def invalidate_layout_cache() -> None:
     _layout_cache["mtime"]      = 0.0
     _layout_cache["scaled"]     = None
     _layout_cache["scaled_key"] = None
+    # Font sizes / positions may have changed — clear derived render caches
+    _page_bg_cache.clear()
+    _page_strip_cache.clear()
+    _spotify_render_cache["key"] = None
 
 
 # ── Colors ─────────────────────────────────────────────────────────────────────────
@@ -461,10 +465,13 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
 
     _, lh = _text_size(draw, "12AM", lbl_f)
     _, th = _text_size(draw, "72\xb0", tmp_f)
-    gap   = 3
-    y0    = grid_top + 5
-    y_tmp  = y0 + lh + gap + 2 + 3
-    y_rain = y_tmp + th + gap + 2 + 2
+    _, rh = _text_size(draw, "99%",   rn_f)
+    gap     = 4
+    total_h = lh + gap + th + gap + rh
+    cell_h  = H - grid_top
+    y0      = grid_top + max(4, (cell_h - total_h) // 2)
+    y_tmp   = y0 + lh + gap
+    y_rain  = y_tmp + th + gap
 
     for i, item in enumerate(items[:cols]):
         x = i * col_w
@@ -566,6 +573,34 @@ def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
         draw.arc(bb, start=280, end=335, fill=(255, 255, 255), width=w)
 
 
+# ── Numpy fast-path helpers ───────────────────────────────────────────────────────────
+
+# Per-page scroll strip cache: slot → {key, strip_pil, arr, tw_gap, strip_w, strip_h, max_w, color}
+_page_strip_cache: dict = {}
+# Per-page static background cache: page_name → {data_key, bg_arr, zones}
+_page_bg_cache:    dict = {}
+# Populated by render_page_pil; consumed by render_page_rgb565 for the fast path
+_current_scroll_zones: list = []
+
+# Spotify fast-path cache (separate from general page cache due to progress zone)
+_spotify_render_cache: dict = {
+    "key": None,       # (track, artist, album, art_url, ART_SIZE, W, H)
+    "bg_arr": None,    # uint16 H×W numpy array — static bg, title row blanked
+    "strip_arr": None, # uint16 (th+2)×strip_w
+    "tw_gap": 0, "strip_w": 0,
+    "TEXT_X": 0, "track_y": 0, "TEXT_W": 0, "th": 0,
+    "BAR_Y": 0, "T_Y": 0, "EDGE": 0,
+    "f_time": None, "BG": None, "GREEN": None, "MUTED": None, "DIM": None,
+}
+
+
+def _pil_to_arr(img: "Image.Image") -> "_np.ndarray":
+    """Convert PIL RGB image to H×W uint16 numpy array in little-endian RGB565."""
+    a = _np.frombuffer(img.tobytes(), _np.uint8).reshape(-1, 3).astype(_np.uint16)
+    p = ((a[:, 0] & 0xF8) << 8) | ((a[:, 1] & 0xFC) << 3) | (a[:, 2] >> 3)
+    return p.astype('<u2').reshape(img.height, img.width)
+
+
 # ── Spotify scroll state ──────────────────────────────────────────────────────────────
 
 _scroll_states: dict[str, dict] = {}
@@ -589,6 +624,10 @@ def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
     if key != state["key"]:
         state.update(key=key, offset=0.0, needs_scroll=True,
                      entered_at=now, last_tick=now, cycles=0)
+        return 0, True
+    # Gap > 1s means the page was navigated away and is now re-entering
+    if state["last_tick"] > 0 and now - state["last_tick"] > 1.0:
+        state.update(offset=0.0, entered_at=now, last_tick=now, cycles=0)
         return 0, True
     if now - state["entered_at"] < _SCROLL_PAUSE_S:
         state["last_tick"] = now
@@ -628,28 +667,11 @@ _spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0}
 
 
 def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int:
-    """Return progress_ms advanced by wall-clock time since last API update.
-
-    Only resets the clock on track change or when the API value diverges >5s
-    from the running estimate (e.g. seek, pause/resume). Normal 10-second API
-    polls update the base without resetting the clock so the display ticks
-    smoothly between polls.
-    """
+    """Return progress_ms advanced by wall-clock time since last API update."""
     now = _time_mod.time()
     sp  = _spotify_progress
-    if track != sp["track"]:
-        # New track — hard reset
+    if track != sp["track"] or progress_ms != sp["base_ms"]:
         sp["track"] = track; sp["base_ms"] = progress_ms; sp["received_at"] = now
-    elif progress_ms != sp["base_ms"]:
-        # API returned a new position — check if it diverges >5s from estimate
-        elapsed_ms = int((now - sp["received_at"]) * 1000)
-        estimated  = sp["base_ms"] + elapsed_ms
-        if abs(progress_ms - estimated) > 5000:
-            # Seek or pause/resume — reset anchor
-            sp["base_ms"] = progress_ms; sp["received_at"] = now
-        else:
-            # Normal poll drift — update base, keep clock running from same anchor
-            sp["base_ms"] = progress_ms
     elapsed_ms = int((now - sp["received_at"]) * 1000)
     current    = sp["base_ms"] + elapsed_ms
     return min(current, duration_ms) if duration_ms > 0 else current
@@ -779,9 +801,148 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     return img
 
 
+# ── Spotify numpy fast-path renderer ─────────────────────────────────────────────────
+
+_SPOTIFY_STRIP_GAP = 40  # px between scroll repetitions
+
+
+def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
+    """Render Spotify page via numpy array cache. Returns RGB565 bytes or None on error."""
+    if not _NUMPY:
+        return None
+    try:
+        W = layout["canvas"]["width"]
+        H = layout["canvas"]["height"]
+        HEADER_H  = 28
+        BAR_ZONE  = 26
+        EDGE      = 8
+        CONTENT_Y = HEADER_H + 1
+        CONTENT_H = H - CONTENT_Y - BAR_ZONE
+        ART_PAD   = 4
+        ART_SIZE  = min(CONTENT_H - ART_PAD * 2, 150)
+        art_x     = ART_PAD + 5
+        TEXT_X    = art_x + ART_SIZE + 8
+        TEXT_W    = W - TEXT_X - EDGE
+
+        track   = page.get("track",  "") or ""
+        artist  = page.get("artist", "") or ""
+        album   = page.get("album",  "") or ""
+        art_url = page.get("art_url")
+        art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+        BG      = _album_bg_color(art_img) if art_img else (25, 20, 20)
+
+        cache_key = (track, artist, album, art_url, ART_SIZE, W, H)
+        sc = _spotify_render_cache
+
+        if sc["key"] != cache_key:
+            # Full PIL render to prime the cache
+            img = render_spotify_page(page, layout)
+
+            # Measure title geometry (same logic as render_spotify_page)
+            tmp_draw = ImageDraw.Draw(img)
+            f_track  = _get_font(18, layout)
+            f_artist = _get_font(14, layout)
+            f_album  = _get_font(13, layout)
+            art_y    = CONTENT_Y + (CONTENT_H - ART_SIZE) // 2
+            _, th  = _text_size(tmp_draw, track  or " ", f_track)
+            _, ah  = _text_size(tmp_draw, artist or " ", f_artist)
+            _, lh_ = _text_size(tmp_draw, album  or " ", f_album)
+            GAP     = 7
+            block_h = th + GAP + ah + GAP + lh_
+            ty0     = art_y + max(0, (ART_SIZE - block_h) // 2)
+            track_y = ty0
+
+            # Build bg by blanking the title row with BG color
+            bg = img.copy()
+            ImageDraw.Draw(bg).rectangle(
+                [TEXT_X, track_y, TEXT_X + TEXT_W, track_y + th + 2], fill=BG)
+
+            # Build scroll strip if needed
+            tw, _ = _text_size(tmp_draw, track, f_track) if track else (0, 0)
+            if tw > TEXT_W:
+                gap_px  = _SPOTIFY_STRIP_GAP
+                strip_w = tw + gap_px + tw
+                strip   = Image.new("RGB", (strip_w, th + 2), BG)
+                sd      = ImageDraw.Draw(strip)
+                sd.text((0, 0),          track, font=f_track, fill=(255, 255, 255))
+                sd.text((tw + gap_px, 0), track, font=f_track, fill=(255, 255, 255))
+                sc["strip_arr"] = _pil_to_arr(strip)
+                sc["tw_gap"]    = tw + gap_px
+                sc["strip_w"]   = strip_w
+            else:
+                sc["strip_arr"] = None
+                sc["tw_gap"]    = 0
+                sc["strip_w"]   = 0
+
+            sc.update(
+                key=cache_key, bg_arr=_pil_to_arr(bg),
+                TEXT_X=TEXT_X, track_y=track_y, TEXT_W=TEXT_W, th=th,
+                BAR_Y=H - BAR_ZONE + 4, T_Y=H - BAR_ZONE + 4 + 7, EDGE=EDGE,
+                f_time=_get_font(10, layout),
+                BG=BG, GREEN=(29, 185, 84), MUTED=(179, 179, 179), DIM=(51, 51, 51),
+            )
+
+        # Compose frame from cache
+        frame = sc["bg_arr"].copy()
+
+        # Scroll strip
+        if sc["strip_arr"] is not None:
+            tw_s = sc["tw_gap"] - _SPOTIFY_STRIP_GAP
+            off, needs = _tick_scroll("spotify", track, tw_s, sc["TEXT_W"])
+            if needs:
+                sa    = sc["strip_arr"]
+                sw    = sc["strip_w"]
+                ty    = sc["track_y"];  tx   = sc["TEXT_X"]
+                tw_d  = sc["TEXT_W"];   th_s = sc["th"] + 2
+                avail = sw - off
+                if avail >= tw_d:
+                    frame[ty:ty+th_s, tx:tx+tw_d] = sa[:, off:off+tw_d]
+                else:
+                    frame[ty:ty+th_s, tx:tx+avail]     = sa[:, off:]
+                    frame[ty:ty+th_s, tx+avail:tx+tw_d] = sa[:, :tw_d-avail]
+
+        # Progress zone (small PIL image, height = BAR_ZONE rows)
+        BAR_ZONE_ = BAR_ZONE
+        bar_y_z   = sc["BAR_Y"] - (H - BAR_ZONE_)
+        t_y_z     = sc["T_Y"]   - (H - BAR_ZONE_)
+        EDGE_     = sc["EDGE"]
+        DIM_      = sc["DIM"];   GREEN_ = sc["GREEN"];  MUTED_ = sc["MUTED"]
+        f_time_   = sc["f_time"]
+
+        prog = Image.new("RGB", (W, BAR_ZONE_), sc["BG"])
+        pdraw = ImageDraw.Draw(prog)
+        duration_ms = page.get("duration_ms") or 0
+        current_ms  = _interpolate_progress(
+            track, page.get("progress_ms") or 0, duration_ms)
+
+        def _fmt(ms):
+            s = max(0, ms) // 1000
+            return f"{s // 60}:{s % 60:02d}"
+
+        pdraw.line([(EDGE_, bar_y_z), (W - EDGE_, bar_y_z)], fill=DIM_, width=4)
+        if duration_ms > 0:
+            fill_x = EDGE_ + int((W - 2 * EDGE_) * min(current_ms / duration_ms, 1.0))
+            if fill_x > EDGE_:
+                pdraw.line([(EDGE_, bar_y_z), (fill_x, bar_y_z)], fill=GREEN_, width=4)
+            pos_str = _fmt(current_ms)
+            rem_str = _fmt(max(0, duration_ms - current_ms))
+            rw, _   = _text_size(pdraw, rem_str, f_time_)
+            pdraw.text((EDGE_, t_y_z),        pos_str, font=f_time_, fill=MUTED_)
+            pdraw.text((W - rw - EDGE_, t_y_z), rem_str, font=f_time_, fill=MUTED_)
+
+        frame[H - BAR_ZONE_:, :] = _pil_to_arr(prog)
+        return frame.tobytes()
+    except Exception as exc:
+        print(f"[render] spotify fast path: {exc}")
+        return None
+
+
 # ── Main renderer ────────────────────────────────────────────────────────────────────
 
 def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
+    global _current_scroll_zones
+    _current_scroll_zones = []
+
     if layout is None:
         layout = load_layout()
 
@@ -934,15 +1095,33 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
                     paste_x    = cx - max_w // 2
                     if tw_s > 0:
                         gap_px  = 40
-                        strip_w = tw_s + gap_px + tw_s
-                        strip   = Image.new("RGB", (strip_w, th_s + 2), (0, 0, 0))
-                        sd      = ImageDraw.Draw(strip)
-                        sd.text((0, 0),              text, font=active_font, fill=color)
-                        sd.text((tw_s + gap_px, 0),  text, font=active_font, fill=color)
-                        off    = int(offset) % (tw_s + gap_px)
+                        tw_gap  = tw_s + gap_px
+                        strip_w = tw_gap + tw_s
+                        # Build/update strip cache (expensive text draw, only on content change)
+                        sc = _page_strip_cache.get(scroll_slot)
+                        if sc is None or sc["key"] != text or sc.get("color") != color:
+                            strip_pil = Image.new("RGB", (strip_w, th_s + 2), (0, 0, 0))
+                            sd        = ImageDraw.Draw(strip_pil)
+                            sd.text((0, 0),         text, font=active_font, fill=color)
+                            sd.text((tw_gap, 0),    text, font=active_font, fill=color)
+                            _page_strip_cache[scroll_slot] = {
+                                "key": text, "color": color,
+                                "strip_pil": strip_pil,
+                                "arr": _pil_to_arr(strip_pil) if _NUMPY else None,
+                                "tw_gap": tw_gap, "strip_w": strip_w,
+                                "strip_h": th_s + 2, "max_w": max_w,
+                            }
+                        else:
+                            strip_pil = sc["strip_pil"]
+                        # Record zone for bg cache (used by render_page_rgb565 fast path)
+                        _current_scroll_zones.append(
+                            (scroll_slot, paste_x, scroll_y, max_w, th_s + 2))
+                        # PIL paste for correctness (also used by non-numpy callers)
+                        off    = int(offset) % tw_gap
                         crop_w = min(max_w, strip_w - off)
                         if crop_w > 0:
-                            img.paste(strip.crop((off, 0, off + crop_w, th_s + 2)), (paste_x, scroll_y))
+                            img.paste(strip_pil.crop((off, 0, off + crop_w, th_s + 2)),
+                                      (paste_x, scroll_y))
                 else:
                     n_sub       = 2 if l2 else 1
                     gap2        = 2
@@ -1041,15 +1220,9 @@ def _img_to_rgb565(img: "Image.Image") -> bytes:
     the previous px[x,y] nested loop approach).
     """
     if _NUMPY:
-        a = _np.frombuffer(img.tobytes(), dtype=_np.uint8).reshape(-1, 3)
-        r = a[:, 0].astype(_np.uint16)
-        g = a[:, 1].astype(_np.uint16)
-        b = a[:, 2].astype(_np.uint16)
-        p   = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
-        out = _np.empty(p.size * 2, dtype=_np.uint8)
-        out[0::2] = (p & 0xFF).astype(_np.uint8)
-        out[1::2] = (p >> 8).astype(_np.uint8)
-        return bytes(out)
+        a = _np.frombuffer(img.tobytes(), _np.uint8).reshape(-1, 3).astype(_np.uint16)
+        p = ((a[:, 0] & 0xF8) << 8) | ((a[:, 1] & 0xFC) << 3) | (a[:, 2] >> 3)
+        return p.astype('<u2').tobytes()
     raw = img.tobytes()
     n   = len(raw) // 3
     buf = bytearray(n * 2)
@@ -1061,13 +1234,98 @@ def _img_to_rgb565(img: "Image.Image") -> bytes:
     return bytes(buf)
 
 
+def _compose_page_from_cache(page_name: str, page_id: int) -> "bytes | None":
+    """Compose a page frame from cached bg_arr + strip arrays. Returns None on miss."""
+    bg_e = _page_bg_cache.get(page_name)
+    if bg_e is None or bg_e.get("page_id") != page_id:
+        return None
+    try:
+        frame = bg_e["bg_arr"].copy()
+        for slot, px, py, pw, ph in bg_e["zones"]:
+            sc = _page_strip_cache.get(slot)
+            if sc is None or sc.get("arr") is None:
+                return None
+            # Advance scroll state (normally done inside render_page_pil)
+            tw_s = sc["tw_gap"] - 40  # 40 = gap_px in the wrap block
+            off, needs = _tick_scroll(slot, sc["key"], tw_s, sc["max_w"])
+            if not needs:
+                return None  # text no longer scrolling — fall back to PIL
+            sa    = sc["arr"]
+            sw    = sc["strip_w"]
+            avail = sw - off
+            if avail >= pw:
+                frame[py:py+ph, px:px+pw] = sa[:, off:off+pw]
+            else:
+                frame[py:py+ph, px:px+avail]   = sa[:, off:]
+                frame[py:py+ph, px+avail:px+pw] = sa[:, :pw-avail]
+        return frame.tobytes()
+    except Exception as exc:
+        print(f"[render] page compose: {exc}")
+        return None
+
+
+def _build_page_cache(page_name: str, page_id: int,
+                      img: "Image.Image", zones: list) -> None:
+    """Store bg_arr (scroll zones blanked) and zone metadata, keyed by page object id."""
+    try:
+        bg_img  = img.copy()
+        bg_draw = ImageDraw.Draw(bg_img)
+        for _, px, py, pw, ph in zones:
+            bg_draw.rectangle([px, py, px + pw, py + ph], fill=(0, 0, 0))
+        _page_bg_cache[page_name] = {
+            "page_id": page_id,
+            "bg_arr":  _pil_to_arr(bg_img),
+            "zones":   zones[:],
+        }
+    except Exception as exc:
+        print(f"[render] page cache build: {exc}")
+
+
+def _rotate_rgb565(data: bytes) -> bytes:
+    """Reverse all 16-bit pixel words — equivalent to 180° rotation."""
+    if _NUMPY:
+        return _np.frombuffer(data, '<u2')[::-1].tobytes()
+    n   = len(data) // 2
+    buf = bytearray(n * 2)
+    for i in range(n):
+        j = n - 1 - i
+        buf[i*2], buf[i*2+1] = data[j*2], data[j*2+1]
+    return bytes(buf)
+
+
 def render_page_rgb565(page: dict, layout: dict | None = None,
                        rotate_180: bool = False) -> bytes:
     """Render a page to raw RGB565 bytes for the framebuffer."""
+    page_name = page.get("_name", "")
+
+    page_id = id(page)
+
+    # ── Spotify fast path: full numpy cache, tiny PIL progress zone ───────────
+    if page_name == "spotify":
+        data = _render_spotify_fast(page, layout)
+        if data is not None:
+            return _rotate_rgb565(data) if rotate_180 else data
+
+    # ── General scroll page fast path: skip PIL on cache hit ─────────────────
+    if _NUMPY and page_name not in ("custom_image",):
+        data = _compose_page_from_cache(page_name, page_id)
+        if data is not None:
+            return _rotate_rgb565(data) if rotate_180 else data
+
+    # ── Full PIL render (cache miss or numpy unavailable) ─────────────────────
     img = render_page_pil(page, layout)
-    if rotate_180:
-        img = img.rotate(180)
-    return _img_to_rgb565(img)
+
+    # If scroll zones were found, build/update bg cache for future ticks
+    if _NUMPY and _current_scroll_zones and page_name not in ("custom_image",):
+        _build_page_cache(page_name, page_id, img, _current_scroll_zones)
+        # Use the newly cached data for this frame too
+        data = _compose_page_from_cache(page_name, page_id)
+        if data is not None:
+            return _rotate_rgb565(data) if rotate_180 else data
+
+    # ── Standard PIL → RGB565 (non-scroll pages or numpy unavailable) ─────────
+    data = _img_to_rgb565(img)
+    return _rotate_rgb565(data) if rotate_180 else data
 
 
 def solid_frame(W: int, H: int, color_rgb: tuple[int, int, int]) -> bytes:

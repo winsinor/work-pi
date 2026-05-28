@@ -1,5 +1,6 @@
 requests
 Pillow
+numpy
 icalendar
 recurring-ical-events
 cairosvg
