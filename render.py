@@ -558,6 +558,35 @@ def _album_bg_color(art_img: "Image.Image") -> tuple:
     return (int(r2 * 255), int(g2 * 255), int(b2 * 255))
 
 
+def _wcag_lum(r: int, g: int, b: int) -> float:
+    def ch(c):
+        c /= 255.0
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b)
+
+
+def _min_gray_for_contrast(bg_lum: float, ratio: float) -> int:
+    target = ratio * (bg_lum + 0.05) - 0.05
+    if target <= 0:
+        return 0
+    if target >= 1.0:
+        return 255
+    if target <= 0.00313:
+        return int(target * 12.92 * 255)
+    return int((target ** (1.0 / 2.4) * 1.055 - 0.055) * 255)
+
+
+def _adaptive_text_colors(bg: tuple) -> tuple:
+    """Return (title_color, artist_color, album_color) with readable contrast against bg."""
+    bg_lum = _wcag_lum(*bg)
+    if bg_lum >= 0.179:
+        return (15, 15, 15), (50, 50, 50), (80, 80, 80)
+    title = (255, 255, 255)
+    v_artist = max(160, _min_gray_for_contrast(bg_lum, 4.5))
+    v_album  = max(130, _min_gray_for_contrast(bg_lum, 3.0))
+    return title, (v_artist, v_artist, v_artist), (v_album, v_album, v_album)
+
+
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
     """Approximate Spotify circle icon: green disc with 3 arcs concentric from lower-left."""
     r = size // 2
@@ -683,10 +712,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     SPOTIFY_DARK = (25,  20,  20)
     GREEN        = (29, 185,  84)
-    WHITE        = (255, 255, 255)
-    MUTED        = (179, 179, 179)
     DIM          = (51,  51,  51)
-    ALB_COLOR    = (102, 102, 102)
 
     HEADER_H  = 28
     BAR_ZONE  = 26   # px reserved at bottom (bar + time labels + edge clearance)
@@ -703,6 +729,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     art_img  = _fetch_album_art(art_url, ART_SIZE) if art_url else None
 
     BG = _album_bg_color(art_img) if art_img else SPOTIFY_DARK
+    WHITE, MUTED, ALB_COLOR = _adaptive_text_colors(BG)
 
     img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
@@ -859,13 +886,14 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
 
             # Build scroll strip if needed
             tw, _ = _text_size(tmp_draw, track, f_track) if track else (0, 0)
+            TITLE_C, ARTIST_C, ALBUM_C = _adaptive_text_colors(BG)
             if tw > TEXT_W:
                 gap_px  = _SPOTIFY_STRIP_GAP
                 strip_w = tw + gap_px + tw
                 strip   = Image.new("RGB", (strip_w, th + 2), BG)
                 sd      = ImageDraw.Draw(strip)
-                sd.text((0, 0),          track, font=f_track, fill=(255, 255, 255))
-                sd.text((tw + gap_px, 0), track, font=f_track, fill=(255, 255, 255))
+                sd.text((0, 0),          track, font=f_track, fill=TITLE_C)
+                sd.text((tw + gap_px, 0), track, font=f_track, fill=TITLE_C)
                 sc["strip_arr"] = _pil_to_arr(strip)
                 sc["tw_gap"]    = tw + gap_px
                 sc["strip_w"]   = strip_w
@@ -879,7 +907,7 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
                 TEXT_X=TEXT_X, track_y=track_y, TEXT_W=TEXT_W, th=th,
                 BAR_Y=H - BAR_ZONE + 4, T_Y=H - BAR_ZONE + 4 + 7, EDGE=EDGE,
                 f_time=_get_font(10, layout),
-                BG=BG, GREEN=(29, 185, 84), MUTED=(179, 179, 179), DIM=(51, 51, 51),
+                BG=BG, GREEN=(29, 185, 84), MUTED=ARTIST_C, DIM=(51, 51, 51),
             )
 
         # Compose frame from cache
