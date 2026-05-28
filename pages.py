@@ -296,12 +296,14 @@ def build_spotify_page(store: DataStore) -> dict | None:
     if not sp:
         return None
     return {
-        "_name":   "spotify",
-        "title":   "Now Playing",
-        "track":   sp.get("track", ""),
-        "artist":  sp.get("artist", ""),
-        "album":   sp.get("album", ""),
-        "art_url": sp.get("art_url"),
+        "_name":       "spotify",
+        "title":       "Now Playing",
+        "track":       sp.get("track", ""),
+        "artist":      sp.get("artist", ""),
+        "album":       sp.get("album", ""),
+        "art_url":     sp.get("art_url"),
+        "progress_ms": sp.get("progress_ms", 0),
+        "duration_ms": sp.get("duration_ms", 0),
     }
 
 

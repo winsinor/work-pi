@@ -534,70 +534,74 @@ def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
 
 
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
-    W   = layout["canvas"]["width"]
-    H   = layout["canvas"]["height"]
-    hh  = layout["header"]["height"]
-    img  = Image.new("RGB", (W, H), (0, 0, 0))
+    W = layout["canvas"]["width"]
+    H = layout["canvas"]["height"]
+
+    BG        = (25,  20,  20)
+    GREEN     = (29, 185,  84)
+    WHITE     = (255, 255, 255)
+    MUTED     = (179, 179, 179)
+    DIM       = (51,  51,  51)
+    ALB_COLOR = (102, 102, 102)
+
+    img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    if hh > 0:
-        draw.rectangle([0, 0, W, hh], fill=tuple(layout["header"]["bg"]))
-        title_f = _get_font(20, layout)
-        title   = page.get("title", "Now Playing")
-        tw, th  = _text_size(draw, title, title_f)
-        draw.text(((W - tw) // 2, (hh - th) // 2), title,
-                  font=title_f, fill=_pil_color(layout["header"]["title_color"]))
-        draw.line([(0, hh), (W, hh)], fill=(60, 60, 60), width=1)
+    # ── Header ───────────────────────────────────────────────────────────────
+    f_label = _get_font(12, layout)
+    f_pill  = _get_font(10, layout)
 
-    content_y0 = hh + 4
-    content_h  = H - content_y0 - 4
+    draw.text((16, 8), "NOW PLAYING", font=f_label, fill=MUTED)
 
-    ART_PAD  = 8
-    ART_SIZE = min(content_h - ART_PAD * 2, 110)
-    art_x    = ART_PAD
-    art_y    = content_y0 + (content_h - ART_SIZE) // 2
+    draw.rectangle([234, 4, 304, 22], fill=GREEN)
+    pw, ph = _text_size(draw, "SPOTIFY", f_pill)
+    draw.text((234 + (70 - pw) // 2, 4 + (18 - ph) // 2), "SPOTIFY",
+              font=f_pill, fill=BG)
+
+    draw.line([(0, 28), (W, 28)], fill=DIM, width=1)
+
+    # ── Album art (centered, 110x110) ────────────────────────────────────────
+    ART_SIZE = 110
+    art_x = (W - ART_SIZE) // 2
+    art_y = 40
 
     art_url = page.get("art_url")
-    if art_url:
-        art_img = _fetch_album_art(art_url, ART_SIZE)
-        if art_img:
-            img.paste(art_img, (art_x, art_y))
-        else:
-            draw.rectangle([art_x, art_y, art_x + ART_SIZE, art_y + ART_SIZE],
-                           fill=(35, 35, 35), outline=(70, 70, 70))
-    else:
-        draw.rectangle([art_x, art_y, art_x + ART_SIZE, art_y + ART_SIZE],
-                       fill=(35, 35, 35), outline=(70, 70, 70))
+    art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+    draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
+                   fill=(35, 35, 35), outline=DIM)
+    if art_img:
+        img.paste(art_img, (art_x, art_y))
 
-    TEXT_X = art_x + ART_SIZE + 10
-    TEXT_W = W - TEXT_X - 6
-
-    f_track  = _get_font(17, layout)
-    f_artist = _get_font(14, layout)
+    # ── Text (centered) ──────────────────────────────────────────────────────
+    MAX_W    = 288
+    f_track  = _get_font(22, layout)
+    f_artist = _get_font(16, layout)
     f_album  = _get_font(12, layout)
 
-    track  = page.get("track",  "") or ""
-    artist = page.get("artist", "") or ""
-    album  = page.get("album",  "") or ""
+    track  = _truncate_to_fit(draw, page.get("track",  "") or "", f_track,  MAX_W)
+    artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, MAX_W)
+    album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  MAX_W)
 
-    def measure_block():
-        lines = []
-        for text, font in ((track, f_track), (artist, f_artist), (album, f_album)):
-            text = _truncate_to_fit(draw, text, font, TEXT_W)
-            _, lh = _text_size(draw, text or " ", font)
-            lines.append((text, font, lh))
-        return lines
-
-    text_lines = measure_block()
-    GAP = 5
-    total_h = sum(lh for _, _, lh in text_lines) + GAP * (len(text_lines) - 1)
-    ty = content_y0 + (content_h - total_h) // 2
-
-    colors = [(255, 255, 255), (100, 190, 255), (140, 140, 140)]
-    for (text, font, lh), color in zip(text_lines, colors):
+    for text, font, y, color in (
+        (track,  f_track,  158, WHITE),
+        (artist, f_artist, 184, MUTED),
+        (album,  f_album,  206, ALB_COLOR),
+    ):
         if text:
-            draw.text((TEXT_X, ty), text, font=font, fill=color)
-        ty += lh + GAP
+            tw, _ = _text_size(draw, text, font)
+            draw.text(((W - tw) // 2, y), text, font=font, fill=color)
+
+    # ── Progress bar ─────────────────────────────────────────────────────────
+    BAR_Y  = 232
+    BAR_X0 = 16
+    BAR_X1 = W - 16
+    draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
+    progress_ms = page.get("progress_ms") or 0
+    duration_ms = page.get("duration_ms") or 0
+    if duration_ms > 0:
+        fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(progress_ms / duration_ms, 1.0))
+        if fill_x > BAR_X0:
+            draw.line([(BAR_X0, BAR_Y), (fill_x, BAR_Y)], fill=GREEN, width=4)
 
     return img
 

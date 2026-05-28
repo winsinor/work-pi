@@ -673,10 +673,12 @@ def fetch_spotify(store: DataStore) -> dict | None:
     if not art_url and images:
         art_url = images[-1]["url"]
     return {
-        "track":   item.get("name", ""),
-        "artist":  artists,
-        "album":   album.get("name", ""),
-        "art_url": art_url,
+        "track":       item.get("name", ""),
+        "artist":      artists,
+        "album":       album.get("name", ""),
+        "art_url":     art_url,
+        "progress_ms": data.get("progress_ms") or 0,
+        "duration_ms": item.get("duration_ms") or 0,
     }
 
 
