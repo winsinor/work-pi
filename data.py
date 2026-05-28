@@ -618,7 +618,11 @@ _spotify_token: dict = {"access_token": None, "expires_at": 0.0}
 
 def _spotify_access_token(cfg: dict) -> str | None:
     """Return a valid Spotify access token, refreshing if necessary."""
+    import config as _cfg_mod
     sp = cfg.get("spotify") or {}
+    # Reload from disk if refresh token missing — handles OAuth done after service start
+    if not sp.get("refresh_token", "").strip():
+        sp = _cfg_mod.load().get("spotify") or {}
     client_id     = sp.get("client_id", "").strip()
     client_secret = sp.get("client_secret", "").strip()
     refresh_token = sp.get("refresh_token", "").strip()
