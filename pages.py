@@ -182,7 +182,7 @@ def build_calendar_page(store: DataStore) -> dict | None:
                 title = ev.get("title", "Event")
                 label    = "Next" if i == 0 else "Then"
                 time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
-                lines.append({"text": f"{label}: {title}", "color": "white"})
+                lines.append({"text": f"{label}: {title}", "color": "grey"})
                 lines.append({"text": time_str, "size": 1, "color": "grey"})
             except Exception:
                 pass

@@ -451,6 +451,8 @@ class SetupHandler(BaseHTTPRequestHandler):
                     b = (p << 3) & 0xF8
                     pixels.append((r, g, b))
                 img.putdata(pixels)
+                if cfg["display"].get("rotation", 0) == 180:
+                    img = img.rotate(180)
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 png = buf.getvalue()
