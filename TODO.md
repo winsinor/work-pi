@@ -27,10 +27,6 @@
 
 ## Features
 
-- **Brightness control via GPIO buttons**: map K1/K2/K3 physical buttons to
-  dim/medium/bright backlight levels. Needs either a PWM-capable GPIO pin wired
-  to the display's backlight, or framebuffer gamma adjustment as a fallback.
-
 - **Stale-data indicator**: show a subtle visual warning (dim border, faded clock,
   or "!" badge) when the last successful data fetch is older than 2× the poll
   interval. Track `last_fetched_at` per data source in `DataStore`; check on each
