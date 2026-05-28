@@ -628,15 +628,30 @@ _spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0}
 
 
 def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int:
-    """Return progress_ms advanced by wall-clock time since last API update."""
+    """Return progress_ms advanced by wall-clock time since last API update.
+
+    Only resets the clock on track change or when the API value diverges >5s
+    from the running estimate (e.g. seek, pause/resume). Normal 10-second API
+    polls update the base without resetting the clock so the display ticks
+    smoothly between polls.
+    """
     now = _time_mod.time()
     sp  = _spotify_progress
-    if track != sp["track"] or progress_ms != sp["base_ms"]:
-        sp["track"]       = track
-        sp["base_ms"]     = progress_ms
-        sp["received_at"] = now
+    if track != sp["track"]:
+        # New track — hard reset
+        sp["track"] = track; sp["base_ms"] = progress_ms; sp["received_at"] = now
+    elif progress_ms != sp["base_ms"]:
+        # API returned a new position — check if it diverges >5s from estimate
+        elapsed_ms = int((now - sp["received_at"]) * 1000)
+        estimated  = sp["base_ms"] + elapsed_ms
+        if abs(progress_ms - estimated) > 5000:
+            # Seek or pause/resume — reset anchor
+            sp["base_ms"] = progress_ms; sp["received_at"] = now
+        else:
+            # Normal poll drift — update base, keep clock running from same anchor
+            sp["base_ms"] = progress_ms
     elapsed_ms = int((now - sp["received_at"]) * 1000)
-    current    = progress_ms + elapsed_ms
+    current    = sp["base_ms"] + elapsed_ms
     return min(current, duration_ms) if duration_ms > 0 else current
 
 
@@ -652,14 +667,15 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     ALB_COLOR    = (102, 102, 102)
 
     HEADER_H  = 28
-    BAR_ZONE  = 22   # px reserved at bottom for progress bar + time labels below
+    BAR_ZONE  = 26   # px reserved at bottom (bar + time labels + edge clearance)
+    EDGE      = 8    # minimum margin from display edges
     CONTENT_Y = HEADER_H + 1
     CONTENT_H = H - CONTENT_Y - BAR_ZONE
 
     # ── Album art (left, fetch early for bg color) ────────────────────────────
     ART_PAD  = 4
     ART_SIZE = min(CONTENT_H - ART_PAD * 2, 150)
-    art_x    = ART_PAD
+    art_x    = ART_PAD + 5   # 5px right of pad
     art_y    = CONTENT_Y + (CONTENT_H - ART_SIZE) // 2
     art_url  = page.get("art_url")
     art_img  = _fetch_album_art(art_url, ART_SIZE) if art_url else None
@@ -693,7 +709,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     # ── Track / artist / album (right of art) ────────────────────────────────
     TEXT_X = art_x + ART_SIZE + 8
-    TEXT_W = W - TEXT_X - 4
+    TEXT_W = W - TEXT_X - EDGE
     GAP    = 7
 
     f_track  = _get_font(18, layout)
@@ -739,9 +755,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     # ── Progress bar with elapsed / remaining ────────────────────────────────
     BAR_Y       = H - BAR_ZONE + 4   # bar sits near top of the reserved zone
-    T_Y         = BAR_Y + 6          # time text sits just below the bar
+    T_Y         = BAR_Y + 7          # time text sits just below the bar
     f_time      = _get_font(10, layout)
-    SIDE_GAP    = 4
     duration_ms = page.get("duration_ms") or 0
     current_ms  = _interpolate_progress(track, page.get("progress_ms") or 0, duration_ms)
 
@@ -749,7 +764,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         s = max(0, ms) // 1000
         return f"{s // 60}:{s % 60:02d}"
 
-    BAR_X0, BAR_X1 = 6, W - 6
+    BAR_X0, BAR_X1 = EDGE, W - EDGE
     draw.line([(BAR_X0, BAR_Y), (BAR_X1, BAR_Y)], fill=DIM, width=4)
     if duration_ms > 0:
         fill_x = BAR_X0 + int((BAR_X1 - BAR_X0) * min(current_ms / duration_ms, 1.0))
@@ -758,8 +773,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         pos_str = _fmt_ms(current_ms)
         rem_str = _fmt_ms(max(0, duration_ms - current_ms))
         rw, _   = _text_size(draw, rem_str, f_time)
-        draw.text((SIDE_GAP, T_Y), pos_str, font=f_time, fill=MUTED)
-        draw.text((W - rw - SIDE_GAP, T_Y), rem_str, font=f_time, fill=MUTED)
+        draw.text((EDGE, T_Y), pos_str, font=f_time, fill=MUTED)
+        draw.text((W - rw - EDGE, T_Y), rem_str, font=f_time, fill=MUTED)
 
     return img
 

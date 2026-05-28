@@ -369,25 +369,36 @@ def main():
                 frame = None
             if frame:
                 _write_frame(frame, fb)
-            is_scroll = (page.get("_name") == "spotify" and spotify_needs_scroll()) or \
-                        (page.get("_name") == "calendar" and calendar_needs_scroll())
-            wait = _SPOTIFY_SCROLL_TICK if is_scroll else dwell
+            _pn = page.get("_name", "")
+            scroll_active = (_pn == "spotify" and spotify_needs_scroll()) or \
+                            (_pn == "calendar" and calendar_needs_scroll())
+            scroll_done   = (_pn == "spotify" and spotify_scroll_complete()) or \
+                            (_pn == "calendar" and calendar_scroll_complete())
+            elapsed = time.time() - _page_entered
+            if scroll_active and not scroll_done:
+                # Still scrolling — fast tick
+                wait = _SPOTIFY_SCROLL_TICK
+            elif scroll_active and scroll_done:
+                # Scroll finished — wait out remaining dwell cleanly (no more ticks)
+                remaining = dwell - elapsed
+                wait = max(remaining, 0.1)
+            else:
+                wait = dwell
             try:
                 delta = _nav_q.get(timeout=wait)
                 idx = (idx + delta) % len(pages)
                 _page_entered = time.time()
                 store.display.fetched_at = 0.0
             except queue.Empty:
-                if is_scroll:
-                    name = page.get("_name")
-                    done = (name == "spotify" and spotify_scroll_complete()) or \
-                           (name == "calendar" and calendar_scroll_complete())
-                    elapsed = time.time() - _page_entered
-                    if elapsed >= dwell * 3 or (done and elapsed >= dwell):
+                elapsed = time.time() - _page_entered
+                if scroll_active and elapsed < dwell * 3:
+                    if not scroll_done:
+                        pass  # scroll tick — keep re-rendering
+                    else:
+                        # Done waiting out dwell — advance
                         idx = (idx + 1) % len(pages)
                         _page_entered = time.time()
                         store.display.fetched_at = 0.0
-                    # else: scroll tick — keep re-rendering
                 else:
                     idx = (idx + 1) % len(pages)
                     _page_entered = time.time()
