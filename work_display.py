@@ -375,11 +375,12 @@ def main():
             scroll_done   = (_pn == "spotify" and spotify_scroll_complete()) or \
                             (_pn == "calendar" and calendar_scroll_complete())
             elapsed = time.time() - _page_entered
-            if scroll_active and not scroll_done:
-                # Still scrolling — fast tick
+            if _pn == "spotify":
+                # Always fast-tick Spotify — progress bar needs live updates even without scroll
+                wait = _SPOTIFY_SCROLL_TICK
+            elif scroll_active and not scroll_done:
                 wait = _SPOTIFY_SCROLL_TICK
             elif scroll_active and scroll_done:
-                # Scroll finished — wait out remaining dwell cleanly (no more ticks)
                 remaining = dwell - elapsed
                 wait = max(remaining, 0.1)
             else:
@@ -391,11 +392,19 @@ def main():
                 store.display.fetched_at = 0.0
             except queue.Empty:
                 elapsed = time.time() - _page_entered
-                if scroll_active and elapsed < dwell * 3:
+                if _pn == "spotify":
+                    # Advance after dwell; allow extra time if still mid-scroll
+                    if scroll_active and not scroll_done and elapsed < dwell * 3:
+                        pass  # still scrolling within grace period
+                    elif elapsed >= dwell:
+                        idx = (idx + 1) % len(pages)
+                        _page_entered = time.time()
+                        store.display.fetched_at = 0.0
+                    # else: within dwell, keep fast-ticking
+                elif scroll_active and elapsed < dwell * 3:
                     if not scroll_done:
                         pass  # scroll tick — keep re-rendering
                     else:
-                        # Done waiting out dwell — advance
                         idx = (idx + 1) % len(pages)
                         _page_entered = time.time()
                         store.display.fetched_at = 0.0
