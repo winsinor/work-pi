@@ -479,8 +479,12 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
         tw, _ = _text_size(draw, tmp, tmp_f)
         rw, _ = _text_size(draw, rn,  rn_f)
 
+        # Center on the numeric portion, ignoring the degree symbol
+        tmp_num = tmp.rstrip("°FfCc ")
+        nw, _  = _text_size(draw, tmp_num, tmp_f) if tmp_num else (tw, 0)
+
         draw.text((cx - lw // 2, y0),     lbl, font=lbl_f, fill=(200, 200, 200))
-        draw.text((cx - tw // 2, y_tmp),  tmp, font=tmp_f, fill=(255, 255, 255))
+        draw.text((cx - nw // 2, y_tmp),  tmp, font=tmp_f, fill=(255, 255, 255))
         draw.text((cx - rw // 2, y_rain), rn,  font=rn_f,  fill=rc)
 
 
