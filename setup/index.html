@@ -333,7 +333,7 @@
         <li>Go to <a href="https://developer.spotify.com/dashboard" target="_blank" style="color:var(--accent)">developer.spotify.com/dashboard</a> and create an app.</li>
         <li>In the app settings, add this exact Redirect URI: <code id="spotify-redirect-uri" style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-size:12px">loading…</code></li>
         <li>Copy your Client ID and Client Secret below, then click <strong>Save</strong>.</li>
-        <li>Click <strong>Connect Spotify</strong> to authorize.</li>
+        <li>Click <strong>Connect Spotify</strong>, complete authorization, then paste the URL from your browser below.</li>
       </ol>
     </div>
     <div class="section">
@@ -352,6 +352,17 @@
         <button class="btn" id="btn-spotify-disconnect" style="display:none;color:var(--red)">Disconnect</button>
       </div>
       <p id="spotify-connect-hint" style="font-size:12px;color:var(--muted);margin-top:8px"></p>
+      <div id="spotify-paste-section" style="display:none;margin-top:12px">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:6px">
+          After authorizing, your browser will show a connection error — that's expected.
+          Copy the full URL from your browser's address bar and paste it below:
+        </p>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="spotify-callback-url" placeholder="http://localhost:8080/spotify/callback?code=…" style="flex:1;font-size:12px">
+          <button class="btn btn-primary" id="btn-spotify-submit-code">Submit</button>
+        </div>
+        <p id="spotify-paste-error" style="font-size:12px;color:var(--red);margin-top:6px;display:none"></p>
+      </div>
     </div>
   </div>
 
@@ -1124,22 +1135,55 @@ $('btn-spotify-connect').addEventListener('click', async () => {
     const r = await fetch('/api/spotify/auth-url');
     const d = await r.json();
     if (d.error) { toast(d.error, 'error'); return; }
-    const win = window.open(d.auth_url, '_blank');
-    $('spotify-connect-hint').textContent = 'Complete authorization in the new tab, then come back here.';
-    // Poll for completion
-    const poll = setInterval(async () => {
-      const s = await fetch('/api/spotify/status').then(r=>r.json()).catch(()=>null);
-      if (s?.connected) {
-        clearInterval(poll);
-        $('spotify-connect-hint').textContent = '';
-        await loadSpotifyStatus();
-        toast('Spotify connected ✓');
-      }
-    }, 2000);
-    setTimeout(() => clearInterval(poll), 120000);
+    window.open(d.auth_url, '_blank');
+    $('spotify-connect-hint').textContent = 'Authorize in the new tab, then paste the redirect URL below.';
+    $('spotify-paste-section').style.display = '';
+    $('spotify-callback-url').focus();
   } catch(e) {
     toast('Error: ' + e.message, 'error');
   }
+});
+
+$('btn-spotify-submit-code').addEventListener('click', async () => {
+  const raw = $('spotify-callback-url').value.trim();
+  if (!raw) return;
+  let code = null;
+  try {
+    const url = new URL(raw);
+    code = url.searchParams.get('code');
+  } catch(_) {
+    // maybe they pasted just the code itself
+    if (/^[A-Za-z0-9_\-]{20,}$/.test(raw)) code = raw;
+  }
+  if (!code) {
+    $('spotify-paste-error').textContent = 'Could not find a code in that URL. Make sure you copied the full address bar URL.';
+    $('spotify-paste-error').style.display = '';
+    return;
+  }
+  $('spotify-paste-error').style.display = 'none';
+  $('btn-spotify-submit-code').disabled = true;
+  try {
+    const r = await fetch('/api/spotify/exchange-code', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({code}),
+    });
+    const d = await r.json();
+    if (d.status === 'connected') {
+      $('spotify-paste-section').style.display = 'none';
+      $('spotify-callback-url').value = '';
+      $('spotify-connect-hint').textContent = '';
+      await loadSpotifyStatus();
+      toast('Spotify connected ✓');
+    } else {
+      $('spotify-paste-error').textContent = d.error || 'Exchange failed';
+      $('spotify-paste-error').style.display = '';
+    }
+  } catch(e) {
+    $('spotify-paste-error').textContent = 'Error: ' + e.message;
+    $('spotify-paste-error').style.display = '';
+  }
+  $('btn-spotify-submit-code').disabled = false;
 });
 
 $('btn-spotify-disconnect').addEventListener('click', async () => {
