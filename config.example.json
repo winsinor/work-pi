@@ -40,7 +40,7 @@
   },
   "calendar": {
     "ics_url":          "https://outlook.office365.com/owa/calendar/…/calendar.ics",
-    "update_interval_s": 600
+    "update_interval_s": 300
   },
   "weather": {
     "update_interval_s": 600

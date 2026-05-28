@@ -474,11 +474,12 @@
       <div class="field">
         <label>Calendar / ICS refresh</label>
         <div style="display:flex; align-items:center; gap:8px">
-          <input type="range" id="int-calendar" min="60" max="3600" step="60">
+          <input type="range" id="int-calendar" min="300" max="3600" step="60">
           <span class="range-val" id="int-calendar-val"></span>
         </div>
+        <p class="hint">Minimum 5 min — ICS parsing is CPU-heavy on Pi 1B+ and can cause brief freezes if run too frequently.</p>
       </div>
-      <p class="hint">AQI refreshes on the same schedule as weather.</p>
+      <p class="hint">AQI and alerts refresh on the same schedule as weather.</p>
     </div>
     <div class="section">
       <div class="section-title">Commute Window</div>
@@ -732,7 +733,7 @@ function populateForm(cfg) {
 
   $('int-weather').value  = cfg.weather?.update_interval_s  || 600;
   $('int-commute').value  = cfg.commute?.update_interval_s  || 300;
-  $('int-calendar').value = cfg.calendar?.update_interval_s || 600;
+  $('int-calendar').value = Math.max(300, cfg.calendar?.update_interval_s || 600);
   ['int-weather','int-commute','int-calendar'].forEach(id => {
     document.getElementById(id).dispatchEvent(new Event('input'));
   });
