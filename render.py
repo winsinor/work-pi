@@ -575,7 +575,7 @@ _SCROLL_PAUSE_S = 1.5   # seconds to hold before starting to scroll
 
 def _make_scroll_slot() -> dict:
     return {"key": "", "offset": 0.0, "needs_scroll": False,
-            "entered_at": 0.0, "last_tick": 0.0}
+            "entered_at": 0.0, "last_tick": 0.0, "cycles": 0}
 
 
 def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
@@ -588,16 +588,19 @@ def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
         return 0, False
     if key != state["key"]:
         state.update(key=key, offset=0.0, needs_scroll=True,
-                     entered_at=now, last_tick=now)
+                     entered_at=now, last_tick=now, cycles=0)
         return 0, True
     if now - state["entered_at"] < _SCROLL_PAUSE_S:
         state["last_tick"] = now
         return 0, True
-    dt = now - state["last_tick"]
+    dt  = now - state["last_tick"]
     state["last_tick"] = now
-    gap   = 40
+    gap = 40
     total = title_w + gap
-    state["offset"] = (state["offset"] + dt * _SCROLL_SPEED) % total
+    raw = state["offset"] + dt * _SCROLL_SPEED
+    if raw >= total:
+        state["cycles"] += 1
+    state["offset"] = raw % total
     return int(state["offset"]), True
 
 
@@ -605,8 +608,18 @@ def spotify_needs_scroll() -> bool:
     return bool(_scroll_states.get("spotify", {}).get("needs_scroll"))
 
 
+def spotify_scroll_complete() -> bool:
+    s = _scroll_states.get("spotify", {})
+    return not s.get("needs_scroll") or s.get("cycles", 0) >= 1
+
+
 def calendar_needs_scroll() -> bool:
     return bool(_scroll_states.get("calendar_0", {}).get("needs_scroll"))
+
+
+def calendar_scroll_complete() -> bool:
+    s = _scroll_states.get("calendar_0", {})
+    return not s.get("needs_scroll") or s.get("cycles", 0) >= 1
 
 
 # ── Spotify progress interpolation ───────────────────────────────────────────────────

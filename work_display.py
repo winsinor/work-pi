@@ -28,11 +28,13 @@ from pages import (
 )
 from render import (
     load_layout, render_page_rgb565, solid_frame,
-    invalidate_layout_cache, spotify_needs_scroll, calendar_needs_scroll,
+    invalidate_layout_cache,
+    spotify_needs_scroll, spotify_scroll_complete,
+    calendar_needs_scroll, calendar_scroll_complete,
     prefetch_spotify_art,
 )
 
-_SPOTIFY_SCROLL_TICK = 0.3  # seconds between re-renders when scrolling
+_SPOTIFY_SCROLL_TICK = 0.2  # seconds between re-renders when scrolling
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
@@ -375,8 +377,16 @@ def main():
                 _page_entered = time.time()
                 store.display.fetched_at = 0.0
             except queue.Empty:
-                if is_scroll and time.time() - _page_entered < dwell:
-                    pass  # scroll tick — re-render same page, keep cache
+                if is_scroll:
+                    name = page.get("_name")
+                    done = (name == "spotify" and spotify_scroll_complete()) or \
+                           (name == "calendar" and calendar_scroll_complete())
+                    elapsed = time.time() - _page_entered
+                    if done and elapsed >= dwell:
+                        idx = (idx + 1) % len(pages)
+                        _page_entered = time.time()
+                        store.display.fetched_at = 0.0
+                    # else: scroll tick — keep re-rendering
                 else:
                     idx = (idx + 1) % len(pages)
                     _page_entered = time.time()
