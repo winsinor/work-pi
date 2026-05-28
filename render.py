@@ -630,6 +630,8 @@ def _pil_to_arr(img: "Image.Image") -> "_np.ndarray":
     return p.astype('<u2').reshape(img.height, img.width)
 
 
+_SCROLL_GAP = 40  # px gap between end of text and start of repeat
+
 # ── Spotify scroll state ──────────────────────────────────────────────────────────────
 
 _scroll_states: dict[str, dict] = {}
@@ -639,12 +641,11 @@ _SCROLL_PAUSE_S = 1.5   # seconds to hold before starting to scroll
 
 def _make_scroll_slot() -> dict:
     return {"key": "", "offset": 0.0, "needs_scroll": False,
-            "entered_at": 0.0, "last_tick": 0.0, "cycles": 0,
-            "direction": 1, "pause_end": 0.0}
+            "entered_at": 0.0, "last_tick": 0.0, "cycles": 0}
 
 
 def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
-    """Advance scroll offset for a named slot (bounce). Returns (pixel_offset, needs_scroll)."""
+    """Advance scroll offset for a named slot. Returns (pixel_offset, needs_scroll)."""
     now   = _time_mod.time()
     needs = title_w > text_w
     state = _scroll_states.setdefault(slot, _make_scroll_slot())
@@ -653,33 +654,24 @@ def _tick_scroll(slot: str, key: str, title_w: int, text_w: int) -> tuple:
         return 0, False
     if key != state["key"]:
         state.update(key=key, offset=0.0, needs_scroll=True,
-                     entered_at=now, last_tick=now, cycles=0,
-                     direction=1, pause_end=now + _SCROLL_PAUSE_S)
+                     entered_at=now, last_tick=now, cycles=0)
         return 0, True
     # Gap > 1s means the page was navigated away and is now re-entering
     if state["last_tick"] > 0 and now - state["last_tick"] > 1.0:
-        state.update(offset=0.0, entered_at=now, last_tick=now, cycles=0,
-                     direction=1, pause_end=now + _SCROLL_PAUSE_S)
+        state.update(offset=0.0, entered_at=now, last_tick=now, cycles=0)
         return 0, True
-    # Hold position during pause (start-of-text or end-of-text dwell)
-    if now < state["pause_end"]:
+    if now - state["entered_at"] < _SCROLL_PAUSE_S:
         state["last_tick"] = now
-        return int(state["offset"]), True
-    dt         = now - state["last_tick"]
+        return 0, True
+    dt    = now - state["last_tick"]
     state["last_tick"] = now
-    max_offset = float(title_w - text_w)
-    new_offset = state["offset"] + state["direction"] * dt * _SCROLL_SPEED
-    if new_offset >= max_offset:
-        new_offset = max_offset
-        state["cycles"]   += 1
-        state["direction"] = -1
-        state["pause_end"] = now + _SCROLL_PAUSE_S
-    elif new_offset <= 0.0:
-        new_offset = 0.0
-        state["direction"] = 1
-        state["pause_end"] = now + _SCROLL_PAUSE_S
-    state["offset"] = new_offset
-    return int(new_offset), True
+    gap   = _SCROLL_GAP
+    total = title_w + gap
+    raw   = state["offset"] + dt * _SCROLL_SPEED
+    if raw >= total:
+        state["cycles"] += 1
+    state["offset"] = raw % total
+    return int(state["offset"]), True
 
 
 def spotify_needs_scroll() -> bool:
@@ -790,15 +782,18 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     artist_y = ty0 + th + GAP
     album_y  = ty0 + th + GAP + ah + GAP
 
-    # Track title — bounce-scroll if too wide
+    # Track title — scroll if too wide
     tw, _ = _text_size(draw, track, f_track) if track else (0, 0)
     offset, needs_scroll = _tick_scroll("spotify", track, tw, TEXT_W)
     if needs_scroll and tw > 0:
-        strip  = Image.new("RGB", (tw, th + 2), BG)
-        sd     = ImageDraw.Draw(strip)
-        sd.text((0, 0), track, font=f_track, fill=WHITE)
-        off    = int(offset)
-        crop_w = min(TEXT_W, tw - off)
+        gap_px  = _SCROLL_GAP
+        strip_w = tw + gap_px + tw
+        strip   = Image.new("RGB", (strip_w, th + 2), BG)
+        sd      = ImageDraw.Draw(strip)
+        sd.text((0, 0),           track, font=f_track, fill=WHITE)
+        sd.text((tw + gap_px, 0), track, font=f_track, fill=WHITE)
+        off    = int(offset) % (tw + gap_px)
+        crop_w = min(TEXT_W, strip_w - off)
         if crop_w > 0:
             img.paste(strip.crop((off, 0, off + crop_w, th + 2)), (TEXT_X, track_y))
     elif track:
@@ -894,12 +889,15 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
             tw, _ = _text_size(tmp_draw, track, f_track) if track else (0, 0)
             TITLE_C, ARTIST_C, ALBUM_C = _adaptive_text_colors(BG)
             if tw > TEXT_W:
-                strip   = Image.new("RGB", (tw, th + 2), BG)
+                gap_px  = _SCROLL_GAP
+                strip_w = tw + gap_px + tw
+                strip   = Image.new("RGB", (strip_w, th + 2), BG)
                 sd      = ImageDraw.Draw(strip)
-                sd.text((0, 0), track, font=f_track, fill=TITLE_C)
+                sd.text((0, 0),           track, font=f_track, fill=TITLE_C)
+                sd.text((tw + gap_px, 0), track, font=f_track, fill=TITLE_C)
                 sc["strip_arr"] = _pil_to_arr(strip)
                 sc["title_w"]   = tw
-                sc["strip_w"]   = tw
+                sc["strip_w"]   = strip_w
             else:
                 sc["strip_arr"] = None
                 sc["title_w"]   = tw
@@ -920,10 +918,16 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         if sc["strip_arr"] is not None:
             off, needs = _tick_scroll("spotify", track, sc["title_w"], sc["TEXT_W"])
             if needs:
-                sa   = sc["strip_arr"]
-                ty   = sc["track_y"];  tx  = sc["TEXT_X"]
-                tw_d = sc["TEXT_W"];   th_s = sc["th"] + 2
-                frame[ty:ty+th_s, tx:tx+tw_d] = sa[:, off:off+tw_d]
+                sa    = sc["strip_arr"]
+                sw    = sc["strip_w"]
+                ty    = sc["track_y"];  tx   = sc["TEXT_X"]
+                tw_d  = sc["TEXT_W"];   th_s = sc["th"] + 2
+                avail = sw - off
+                if avail >= tw_d:
+                    frame[ty:ty+th_s, tx:tx+tw_d] = sa[:, off:off+tw_d]
+                else:
+                    frame[ty:ty+th_s, tx:tx+avail]      = sa[:, off:]
+                    frame[ty:ty+th_s, tx+avail:tx+tw_d] = sa[:, :tw_d-avail]
 
         # Progress zone (small PIL image, height = BAR_ZONE rows)
         BAR_ZONE_ = BAR_ZONE
@@ -1118,17 +1122,21 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
                     cx         = int(explicit_x) if explicit_x is not None else W // 2
                     paste_x    = cx - max_w // 2
                     if tw_s > 0:
+                        gap_px  = _SCROLL_GAP
+                        tw_gap  = tw_s + gap_px
+                        strip_w = tw_gap + tw_s
                         # Build/update strip cache (expensive text draw, only on content change)
                         sc = _page_strip_cache.get(scroll_slot)
                         if sc is None or sc["key"] != text or sc.get("color") != color:
-                            strip_pil = Image.new("RGB", (tw_s, th_s + 2), (0, 0, 0))
+                            strip_pil = Image.new("RGB", (strip_w, th_s + 2), (0, 0, 0))
                             sd        = ImageDraw.Draw(strip_pil)
-                            sd.text((0, 0), text, font=active_font, fill=color)
+                            sd.text((0, 0),      text, font=active_font, fill=color)
+                            sd.text((tw_gap, 0), text, font=active_font, fill=color)
                             _page_strip_cache[scroll_slot] = {
                                 "key": text, "color": color,
                                 "strip_pil": strip_pil,
                                 "arr": _pil_to_arr(strip_pil) if _NUMPY else None,
-                                "title_w": tw_s, "strip_w": tw_s,
+                                "title_w": tw_s, "tw_gap": tw_gap, "strip_w": strip_w,
                                 "strip_h": th_s + 2, "max_w": max_w,
                             }
                         else:
@@ -1137,8 +1145,8 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
                         _current_scroll_zones.append(
                             (scroll_slot, paste_x, scroll_y, max_w, th_s + 2))
                         # PIL paste for correctness (also used by non-numpy callers)
-                        off    = int(offset)
-                        crop_w = min(max_w, tw_s - off)
+                        off    = int(offset) % tw_gap
+                        crop_w = min(max_w, strip_w - off)
                         if crop_w > 0:
                             img.paste(strip_pil.crop((off, 0, off + crop_w, th_s + 2)),
                                       (paste_x, scroll_y))
@@ -1269,8 +1277,14 @@ def _compose_page_from_cache(page_name: str, page_id: int) -> "bytes | None":
             off, needs = _tick_scroll(slot, sc["key"], sc["title_w"], sc["max_w"])
             if not needs:
                 return None  # text no longer scrolling — fall back to PIL
-            sa = sc["arr"]
-            frame[py:py+ph, px:px+pw] = sa[:, off:off+pw]
+            sa    = sc["arr"]
+            sw    = sc["strip_w"]
+            avail = sw - off
+            if avail >= pw:
+                frame[py:py+ph, px:px+pw] = sa[:, off:off+pw]
+            else:
+                frame[py:py+ph, px:px+avail]   = sa[:, off:]
+                frame[py:py+ph, px+avail:px+pw] = sa[:, :pw-avail]
         return frame.tobytes()
     except Exception as exc:
         print(f"[render] page compose: {exc}")
