@@ -591,12 +591,13 @@ def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
     """Spotify circle icon: green disc + 3 white arcs from lower-left focal point."""
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
     w = max(1, size // 7)
-    # Focal point: lower-left outside the circle, matching the real logo geometry.
-    ac_x = x + size // 7
-    ac_y = y + size + size // 6
-    for arc_r in [size * 8 // 22, size * 12 // 22, size * 16 // 22]:
+    # Focal point inside the circle at lower-left quadrant (≈20% from left, 80% down).
+    # Arcs with increasing radius sweep from near-top to upper-right, staying inside the disc.
+    ac_x = x + size // 5
+    ac_y = y + (size * 4) // 5
+    for arc_r in [size * 10 // 22, size * 14 // 22, size * 18 // 22]:
         bb = [ac_x - arc_r, ac_y - arc_r, ac_x + arc_r, ac_y + arc_r]
-        draw.arc(bb, start=272, end=330, fill=(255, 255, 255), width=w)
+        draw.arc(bb, start=265, end=325, fill=(255, 255, 255), width=w)
 
 
 # ── Numpy fast-path helpers ───────────────────────────────────────────────────────────────
@@ -768,7 +769,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     DIM          = (51,  51,  51)
 
     HEADER_H  = 42
-    BAR_ZONE  = 26   # px reserved at bottom (bar + time labels + edge clearance)
+    BAR_ZONE  = 34   # px reserved at bottom (bar + time labels + edge clearance)
     EDGE      = 8    # minimum margin from display edges
     CONTENT_Y = HEADER_H + 1
     CONTENT_H = H - CONTENT_Y - BAR_ZONE
@@ -856,9 +857,9 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=WHITE)
 
     # ── Progress bar with elapsed / remaining ───────────────────────────────────
-    BAR_Y       = H - BAR_ZONE + 4   # bar sits near top of the reserved zone
-    T_Y         = BAR_Y + 7          # time text sits just below the bar
-    f_time      = _get_font(10, layout)
+    BAR_Y       = H - BAR_ZONE + 6   # bar sits near top of the reserved zone
+    T_Y         = BAR_Y + 8          # time text sits just below the bar
+    f_time      = _get_font(18, layout)
     duration_ms = page.get("duration_ms") or 0
     current_ms  = _interpolate_progress(track, page.get("progress_ms") or 0, duration_ms)
 
@@ -893,7 +894,7 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         W = layout["canvas"]["width"]
         H = layout["canvas"]["height"]
         HEADER_H  = 42
-        BAR_ZONE  = 26
+        BAR_ZONE  = 34
         EDGE      = 8
         CONTENT_Y = HEADER_H + 1
         CONTENT_H = H - CONTENT_Y - BAR_ZONE
@@ -919,8 +920,8 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
             _, ARTIST_C, _ = _adaptive_text_colors(BG)
             sc.update(
                 key=cache_key, bg_arr=_pil_to_arr(img),
-                BAR_Y=H - BAR_ZONE + 4, T_Y=H - BAR_ZONE + 4 + 7, EDGE=EDGE,
-                f_time=_get_font(10, layout),
+                BAR_Y=H - BAR_ZONE + 6, T_Y=H - BAR_ZONE + 6 + 8, EDGE=EDGE,
+                f_time=_get_font(18, layout),
                 BG=BG, GREEN=(29, 185, 84), MUTED=ARTIST_C, DIM=(51, 51, 51),
             )
 
