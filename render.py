@@ -37,7 +37,7 @@ _ICONS_DIR = os.path.join(_BASE, "icons")
 _LAYOUT_FILE = os.path.join(_BASE, "work_layout.json")
 
 
-# ── Layout ─────────────────────────────────────────────────────────────────────────
+# ── Layout ────────────────────────────────────────────────────────────────────────
 
 LAYOUT_DEFAULTS: dict = {
     "canvas":  {"width": 480, "height": 320},
@@ -226,7 +226,7 @@ def invalidate_layout_cache() -> None:
     _spotify_render_cache["key"] = None
 
 
-# ── Colors ─────────────────────────────────────────────────────────────────────────
+# ── Colors ────────────────────────────────────────────────────────────────────────
 
 _PIL_COLORS: dict = {
     "white":    (255, 255, 255),
@@ -248,7 +248,7 @@ def _pil_color(name: str) -> tuple:
     return _PIL_COLORS.get(name, (255, 255, 255))
 
 
-# ── Fonts ──────────────────────────────────────────────────────────────────────────
+# ── Fonts ────────────────────────────────────────────────────────────────────────
 
 _pil_font_cache: dict = {}
 
@@ -267,7 +267,7 @@ def _get_font(pt_size, layout: dict):
     return _pil_font_cache[key]
 
 
-# ── Icons ──────────────────────────────────────────────────────────────────────────
+# ── Icons ────────────────────────────────────────────────────────────────────────
 
 _STATIC_ICON_MAP: dict[str, str] = {
     "sun":           "clear-day.svg",
@@ -402,7 +402,7 @@ def _draw_weather_icon(img, draw, name: str, cx: int, cy: int, r: int):
             line(cx - r // 2, fy, cx + r // 2, fy, fog_col, 2)
 
 
-# ── Text helpers ─────────────────────────────────────────────────────────────────────
+# ── Text helpers ───────────────────────────────────────────────────────────────────────
 
 def _text_size(draw, text: str, font) -> tuple:
     bb = draw.textbbox((0, 0), text, font=font)
@@ -434,7 +434,7 @@ def _fit_text(draw, text: str, f, pos_h: int, max_w: int, layout: dict):
     return sf, text, _text_size(draw, text, sf)[0]
 
 
-# ── Overlay renderers ────────────────────────────────────────────────────────────────
+# ── Overlay renderers ────────────────────────────────────────────────────────────────────
 
 def _render_aqi_overlay(draw, aqi: dict, layout: dict):
     cx    = layout["aqi"]["cx"]
@@ -492,7 +492,7 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
         draw.text((cx - rw // 2, y_rain), rn,  font=rn_f,  fill=rc)
 
 
-# ── Custom image page ────────────────────────────────────────────────────────────────
+# ── Custom image page ────────────────────────────────────────────────────────────────────
 
 _custom_image_cache: dict = {}  # (path, mtime, W, H) → PIL Image
 
@@ -518,7 +518,7 @@ def render_custom_image_page(image_path: str, layout: dict) -> "Image.Image":
     return _custom_image_cache[key]
 
 
-# ── Spotify renderer ─────────────────────────────────────────────────────────────────
+# ── Spotify renderer ────────────────────────────────────────────────────────────────────
 
 _spotify_art_cache: dict = {}  # url → PIL Image (resized)
 
@@ -602,7 +602,7 @@ def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
         draw.arc(bb, start=280, end=335, fill=(255, 255, 255), width=w)
 
 
-# ── Numpy fast-path helpers ───────────────────────────────────────────────────────────
+# ── Numpy fast-path helpers ───────────────────────────────────────────────────────────────
 
 # Per-page scroll strip cache: slot → {key, strip_pil, arr, tw_gap, strip_w, strip_h, max_w, color}
 _page_strip_cache: dict = {}
@@ -613,7 +613,7 @@ _current_scroll_zones: list = []
 
 # Spotify fast-path cache (separate from general page cache due to progress zone)
 _spotify_render_cache: dict = {
-    "key": None,    # (track, artist, album, art_url, ART_SIZE, W, H)
+    "key": None,    # (track, artist, album, art_url, playlist, ART_SIZE, W, H)
     "bg_arr": None, # uint16 H×W — complete static frame (title already drawn)
     "BAR_Y": 0, "T_Y": 0, "EDGE": 0,
     "f_time": None, "BG": None, "GREEN": None, "MUTED": None, "DIM": None,
@@ -629,7 +629,7 @@ def _pil_to_arr(img: "Image.Image") -> "_np.ndarray":
 
 _SCROLL_GAP = 40  # px gap between end of text and start of repeat
 
-# ── Spotify scroll state ──────────────────────────────────────────────────────────────
+# ── Spotify scroll state ──────────────────────────────────────────────────────────────────
 
 _scroll_states: dict[str, dict] = {}
 _SCROLL_SPEED   = 30.0  # pixels per second
@@ -776,7 +776,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     CONTENT_Y = HEADER_H + 1
     CONTENT_H = H - CONTENT_Y - BAR_ZONE
 
-    # ── Album art (left, fetch early for bg color) ────────────────────────────
+    # ── Album art (left, fetch early for bg color) ───────────────────────────────
     ART_PAD  = 4
     ART_SIZE = min(CONTENT_H - ART_PAD * 2, 150)
     art_x    = ART_PAD + 5   # 5px right of pad
@@ -790,7 +790,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     img  = Image.new("RGB", (W, H), BG)
     draw = ImageDraw.Draw(img)
 
-    # ── Header ────────────────────────────────────────────────────────────────
+    # ── Header ─────────────────────────────────────────────────────────────────────────
     ICON_SIZE = 19
     f_logo    = _get_font(12, layout)
     spot_text = "Spotify"
@@ -808,13 +808,13 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         _, pl_h = _text_size(draw, pl_text, f_pl)
         draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
 
-    # ── Album art ─────────────────────────────────────────────────────────────
+    # ── Album art ───────────────────────────────────────────────────────────────────────
     draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
                    fill=(35, 35, 35), outline=DIM)
     if art_img:
         img.paste(art_img, (art_x, art_y))
 
-    # ── Track / artist / album (right of art) ────────────────────────────────
+    # ── Track / artist / album (right of art) ────────────────────────────────────
     TEXT_X = art_x + ART_SIZE + 8
     TEXT_W = W - TEXT_X - EDGE
     GAP    = 7
@@ -858,7 +858,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     if album:
         draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=WHITE)
 
-    # ── Progress bar with elapsed / remaining ────────────────────────────────
+    # ── Progress bar with elapsed / remaining ───────────────────────────────────
     BAR_Y       = H - BAR_ZONE + 4   # bar sits near top of the reserved zone
     T_Y         = BAR_Y + 7          # time text sits just below the bar
     f_time      = _get_font(10, layout)
@@ -884,7 +884,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     return img
 
 
-# ── Spotify numpy fast-path renderer ─────────────────────────────────────────────────
+# ── Spotify numpy fast-path renderer ────────────────────────────────────────────────────
 
 
 
@@ -1328,19 +1328,19 @@ def render_page_rgb565(page: dict, layout: dict | None = None,
 
     page_id = id(page)
 
-    # ── Spotify fast path: full numpy cache, tiny PIL progress zone ───────────
+    # ── Spotify fast path: full numpy cache, tiny PIL progress zone ───────────────
     if page_name == "spotify":
         data = _render_spotify_fast(page, layout)
         if data is not None:
             return _rotate_rgb565(data) if rotate_180 else data
 
-    # ── General scroll page fast path: skip PIL on cache hit ─────────────────
+    # ── General scroll page fast path: skip PIL on cache hit ─────────────────────
     if _NUMPY and page_name not in ("custom_image",):
         data = _compose_page_from_cache(page_name, page_id)
         if data is not None:
             return _rotate_rgb565(data) if rotate_180 else data
 
-    # ── Full PIL render (cache miss or numpy unavailable) ─────────────────────
+    # ── Full PIL render (cache miss or numpy unavailable) ───────────────────────
     img = render_page_pil(page, layout)
 
     # If scroll zones were found, build/update bg cache for future ticks
@@ -1351,7 +1351,7 @@ def render_page_rgb565(page: dict, layout: dict | None = None,
         if data is not None:
             return _rotate_rgb565(data) if rotate_180 else data
 
-    # ── Standard PIL → RGB565 (non-scroll pages or numpy unavailable) ─────────
+    # ── Standard PIL → RGB565 (non-scroll pages or numpy unavailable) ───────────
     data = _img_to_rgb565(img)
     return _rotate_rgb565(data) if rotate_180 else data
 
