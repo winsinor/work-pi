@@ -14,22 +14,25 @@ Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches
 ## Pi install
 
 - **Repo lives at `/home/pi/work-pi`** on the Pi
+- **Install dir is `/home/pi/work-dashboard`** — service runs from here, owned by root
 - Service is `work-dashboard`, runs as root
-- `config.json` lives only on the Pi — **gitignored, never commit it**
+- `config.json` lives only on the Pi at `/home/pi/work-dashboard/config.json` — **gitignored, never commit it**
 - `config.example.json` is the committed template
 
 **Standard update command (run on Pi after every push):**
 ```bash
-cd /home/pi/work-pi && git pull origin main && sudo systemctl restart work-dashboard
+cd /home/pi/work-pi && git pull origin main && sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' /home/pi/work-pi/ /home/pi/work-dashboard/ && sudo systemctl restart work-dashboard
 ```
 
-**Shortcut — `deploy` command (installed by install.sh or manually):**
+**Shortcut — `deploy` command:**
 ```bash
-# One-time manual install:
+# Installed automatically by install.sh. If missing:
 sudo ln -sf /home/pi/work-pi/deploy /usr/local/bin/deploy && sudo chmod +x /home/pi/work-pi/deploy
 # Then just run:
 deploy
 ```
+
+> **Note**: `sudo deploy` won't work — sudo's PATH excludes `/usr/local/bin`. Use `deploy` as the `pi` user, or run the full rsync one-liner above.
 
 ## Development workflow
 
@@ -45,7 +48,7 @@ git push origin main
 
 ```bash
 # On Pi — edit config (owned by root, service runs as root)
-sudo python3 -c "import json,sys; c=json.load(open('config.json')); c['key']='val'; json.dump(c,open('config.json','w'),indent=2)"
+sudo nano /home/pi/work-dashboard/config.json
 
 # Restart service
 sudo systemctl restart work-dashboard
@@ -71,21 +74,26 @@ sudo evtest /dev/input/event4
 | `config.py` | `load()`, `is_complete()`, `resolve_font_path()` |
 | `setup/index.html` | Setup web UI (Wi-Fi, location, API keys, Spotify, display, GPIO, etc.) |
 | `editor/work/` | Layout editor (HTML + JS + CSS) |
-| `deploy` | One-liner update script: git pull + restart |
+| `deploy` | One-liner update script: git pull + rsync + restart |
+| `auto-deploy.sh` | Auto-deploy script run by systemd timer every 2 min |
 | `config.json` | Operational config — **gitignored, never commit** |
 | `work_layout.json` | Visual layout overrides — committed, edited via `/editor/work` |
 | `config.example.json` | Template for config.json |
+| `icons/spotify_logo.png` | Official Spotify full logo (not committed — place manually on Pi) |
 
 ## Architecture
 
 ```
 work_display.py
+  ├── _fetch_gate (threading.Event) — cleared while asleep; fetch threads block on it
   ├── _start_fetch_threads()  — weather/commute/calendar/aqi/alerts/spotify loops (daemon threads)
+  │     each loop calls _fetch_gate.wait() before every network fetch
   ├── _start_button_threads() — gpiozero K2/K3 wiring
   ├── touch.start_touch()     — evdev touch → nav queue or stats toggle
   ├── _nav_q (Queue[int])     — +1 / -1 from both touch and K3 GPIO
   ├── _ci_files_cache         — custom images glob cached by directory mtime
   └── main loop
+        ├── sleep mode: clears _fetch_gate, renders "zzz" screensaver, waits on _nav_q(30s)
         ├── stats mode: stats_mod.render_stats_rgb565() → fb, wait on _stats_wake(2s)
         └── page mode:  render_page_rgb565(page, layout) → fb, wait on _nav_q(dwell)
 ```
@@ -137,6 +145,16 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - **Screenshot of the live display** is on the **Display tab** — button hits `/api/screenshot`
 - Location "Look up" button geocodes via Nominatim then auto-detects timezone via `timeapi.io` — populates lat, lon, and timezone dropdown automatically
 - **Spotify tab** — OAuth connect flow; see Spotify section below
+- **Custom images**: `POST /api/upload-image` (multipart) and `POST /api/delete-image` (JSON `{filename}`) — delete button wired in the UI; path-traversal protected
+
+## Config error pages
+
+`pages.py` shows an error page instead of crashing when a feature is enabled but not configured:
+- **Weather**: if `location.lat`/`lon` are both unset → "Location not set" page
+- **Commute**: if TomTom key or home/work addresses are missing AND it's within the commute window → "Commute not configured" page
+- **Calendar**: if `calendar.ics_url` is empty → "No calendar URL" page
+
+These use the `_cfg_err(name, lines)` helper which returns a minimal page dict.
 
 ## GPIO buttons (gpiozero)
 
@@ -219,6 +237,38 @@ Page only appears in rotation while music is actively playing. Disappears within
 - `GET /spotify/callback` — exchanges code for tokens, saves refresh_token, returns success page
 - `GET /api/spotify/status` — returns `{connected, has_credentials}`
 
+**Spotify page layout** (`render.py → render_spotify_page`):
+- `HEADER_H = 42` — header bar height
+- `BAR_ZONE = 34` — bottom zone for progress bar + time labels
+- Logo: loaded from `icons/spotify_logo.png` (official full Spotify logo PNG, aspect-ratio scaled to fit header). Falls back to drawn icon + "Spotify" text if file absent.
+  - To install: `cp Spotify_Full_Logo_RGB_Green.png /home/pi/work-dashboard/icons/spotify_logo.png`
+  - `_load_spotify_logo(target_h)` in render.py handles the cache
+- Artist font: 16pt, Album font: 15pt, time labels: 14pt
+- Numpy fast path: `_render_spotify_fast()` caches static frame as uint16 H×W array; only re-renders the bottom `BAR_ZONE` rows on each tick for the progress bar
+
+## Sleep mode
+
+Configured via Setup → Display tab.
+
+**Hourly window**: `sleep.start_h` / `sleep.end_h` apply on the days listed in `sleep.days` (0=Mon, 6=Sun).
+
+**All-day sleep**: `sleep.all_day_days` — days that sleep the full 24 hours regardless of the time window. Useful for weekends. Checked first in `_in_sleep_window` before the hourly logic.
+
+```json
+"sleep": {
+  "enabled": true,
+  "start_h": 22,
+  "end_h": 7,
+  "days": [0, 1, 2, 3, 4, 5, 6],
+  "all_day_days": [5, 6],
+  "wake_minutes": 60
+}
+```
+
+**Fetch gate**: `_fetch_gate` is a `threading.Event` in `work_display.py`. All six fetch threads call `_fetch_gate.wait()` at the top of each loop. The main loop clears the gate when entering true sleep (not manually woken) and sets it when awake. No network calls happen while sleeping.
+
+**Manual wake**: touch or button press → `_sleep_woke_at = time.time()`. Display stays awake for `wake_minutes`. Fetch gate is re-opened immediately on manual wake.
+
 ## Weather alerts
 
 Active NWS alerts render as a full-width red banner strip (18px) just below the page header, right-aligned text. Fetched via `api.weather.gov/alerts/active`. Alert text stored in `page["alert_banner"]` — not as a line in `page["lines"]`.
@@ -242,6 +292,18 @@ When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` a
 
 ## Known Pi environment gotchas
 
+**Python 3.9 compatibility:**
+- Pi 1B+ runs Python 3.9 (Debian Bullseye). `bytes | None` union syntax requires Python 3.10+.
+- All files that use `X | Y` type annotations must have `from __future__ import annotations` as the first import. This makes all annotations lazy strings at runtime, fixing the crash.
+- `work_display.py` already has this. Add it to any new file that uses union type hints.
+
+**Two directories — repo vs install:**
+- `/home/pi/work-pi` — git repo, owned by `pi` user
+- `/home/pi/work-dashboard` — install dir, owned by root (service runs as root)
+- `rsync` from repo → install dir is required on every deploy; a plain `git pull + restart` won't pick up changes
+- `config.json` is excluded from rsync — it lives only in the install dir
+- `icons/spotify_logo.png` is also not in the repo — must be placed manually in the install dir
+
 **Timezone:**
 - Pi system timezone defaults to UTC. `config.json → location.timezone` is the source of truth for display times.
 - Always use `ZoneInfo(tz)` explicitly — **never `datetime.astimezone()` with no argument** (uses system timezone, not configured timezone).
@@ -257,6 +319,7 @@ When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` a
 **Data fetching:**
 - All fetchers retry on a 30-second backoff after any failure.
 - Fetch threads are daemon threads — they die with the main process.
+- Fetch threads block on `_fetch_gate` (threading.Event) while the display is in true sleep mode.
 - Spotify thread also invalidates `store.display.fetched_at = 0` on each update so the page appears/disappears promptly.
 
 **Git on Pi (service runs as root):**
@@ -272,6 +335,7 @@ When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` a
 - Waits for DNS resolution before running `pip install`.
 - Installs `python3-numpy` as optional apt dep for faster RGB565 conversion.
 - Symlinks `deploy` script to `/usr/local/bin/deploy`.
+- Sudoers rule grants `pi` user passwordless `sudo rsync` and `sudo systemctl restart work-dashboard`.
 
 ## Touch calibration
 
