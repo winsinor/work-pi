@@ -691,27 +691,29 @@ def calendar_scroll_complete() -> bool:
 
 # ── Spotify progress interpolation ───────────────────────────────────────────────────
 
-_spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0}
+_spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0, "last_api_ms": -1}
 
 
 def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int:
     """Return progress_ms advanced by wall-clock time since last API update.
 
-    Ignores API updates that are within 5 s of the current smooth estimate so
-    that normal 10-second polls don't cause visible jumps. Only resets when the
-    track changes or when the difference exceeds 5 s (user seek / resume after
-    pause).
+    progress_ms from the page dict is frozen between track changes, so we must
+    not compare it against the growing estimate on every tick — that always
+    triggers a reset after 5 s. Instead we only run the seek-detection check
+    when the API has actually delivered a *new* value (last_api_ms changes).
+    For a constant progress_ms we just interpolate forward indefinitely.
     """
     now = _time_mod.time()
     sp  = _spotify_progress
-    if track != sp["track"]:
-        sp["track"] = track; sp["base_ms"] = progress_ms; sp["received_at"] = now
-    elif sp["received_at"] == 0.0:
-        sp["base_ms"] = progress_ms; sp["received_at"] = now
-    else:
+    if track != sp["track"] or sp["received_at"] == 0.0:
+        sp.update(track=track, base_ms=progress_ms, received_at=now, last_api_ms=progress_ms)
+    elif progress_ms != sp["last_api_ms"]:
+        # A genuinely new value arrived from the API poll — check for seek
         estimated = sp["base_ms"] + int((now - sp["received_at"]) * 1000)
         if abs(progress_ms - estimated) > 5000:
-            sp["base_ms"] = progress_ms; sp["received_at"] = now
+            sp.update(base_ms=progress_ms, received_at=now)
+        sp["last_api_ms"] = progress_ms
+    # else: same value as last tick — just keep interpolating, touch nothing
     elapsed_ms = int((now - sp["received_at"]) * 1000)
     current    = sp["base_ms"] + elapsed_ms
     return min(current, duration_ms) if duration_ms > 0 else current
