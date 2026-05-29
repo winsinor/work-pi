@@ -472,8 +472,12 @@ def main():
                 frame = None
             if frame:
                 if _page_just_changed and _last_frame is not None:
-                    for _tf in linescan_transition(_last_frame, frame, W, H):
-                        _write_frame(_tf, fb)
+                    try:
+                        for _tf in linescan_transition(_last_frame, frame, W, H):
+                            _write_frame(_tf, fb)
+                            time.sleep(0.010)
+                    except Exception as exc:
+                        print(f"[transition] {exc}")
                 _write_frame(frame, fb)
                 _last_frame = frame
             _page_just_changed = False
