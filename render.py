@@ -850,9 +850,9 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         draw.text((TEXT_X, track_y), title_line1, font=f_track, fill=WHITE)
 
     if artist:
-        draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=MUTED)
+        draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=WHITE)
     if album:
-        draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=ALB_COLOR)
+        draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=WHITE)
 
     # ── Progress bar with elapsed / remaining ────────────────────────────────
     BAR_Y       = H - BAR_ZONE + 4   # bar sits near top of the reserved zone
