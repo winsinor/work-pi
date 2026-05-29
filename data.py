@@ -646,6 +646,29 @@ def _spotify_access_token(cfg: dict) -> str | None:
     return _spotify_token["access_token"]
 
 
+_playlist_name_cache: dict = {}
+
+
+def _fetch_playlist_name(token: str, uri: str) -> str:
+    if uri in _playlist_name_cache:
+        return _playlist_name_cache[uri]
+    try:
+        pid = uri.split(":")[-1]
+        r = requests.get(
+            f"https://api.spotify.com/v1/playlists/{pid}",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"fields": "name"},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            name = r.json().get("name", "")
+            _playlist_name_cache[uri] = name
+            return name
+    except Exception:
+        pass
+    return ""
+
+
 def fetch_spotify(store: DataStore) -> dict | None:
     """Return currently-playing track info, or None if nothing playing."""
     token = _spotify_access_token(store.cfg)
@@ -672,6 +695,14 @@ def fetch_spotify(store: DataStore) -> dict | None:
     art_url   = next((img["url"] for img in images if img.get("width", 0) >= 150), None)
     if not art_url and images:
         art_url = images[-1]["url"]
+
+    # Playlist name (if playing from a playlist)
+    playlist = ""
+    context  = data.get("context") or {}
+    if context.get("type") == "playlist":
+        uri = context.get("uri", "")
+        playlist = _fetch_playlist_name(token, uri)
+
     return {
         "track":       item.get("name", ""),
         "artist":      artists,
@@ -679,6 +710,7 @@ def fetch_spotify(store: DataStore) -> dict | None:
         "art_url":     art_url,
         "progress_ms": data.get("progress_ms") or 0,
         "duration_ms": item.get("duration_ms") or 0,
+        "playlist":    playlist,
     }
 
 

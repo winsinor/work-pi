@@ -791,20 +791,22 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    f_label = _get_font(14, layout)
-    f_logo  = _get_font(12, layout)
-    _, lbl_h = _text_size(draw, "Now Playing", f_label)
-    draw.text((12, (HEADER_H - lbl_h) // 2), "Now Playing", font=f_label, fill=MUTED)
-
-    ICON_SIZE = 16
+    ICON_SIZE = 19
+    f_logo    = _get_font(12, layout)
     spot_text = "Spotify"
-    sw, sh = _text_size(draw, spot_text, f_logo)
-    logo_x  = W - 8 - sw - 4 - ICON_SIZE
-    icon_y  = (HEADER_H - ICON_SIZE) // 2
+    sw, sh    = _text_size(draw, spot_text, f_logo)
+    logo_x    = W - 8 - sw - 4 - ICON_SIZE
+    icon_y    = (HEADER_H - ICON_SIZE) // 2
     _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
     draw.text((logo_x + ICON_SIZE + 4, (HEADER_H - sh) // 2),
               spot_text, font=f_logo, fill=WHITE)
-    draw.line([(0, HEADER_H), (W, HEADER_H)], fill=DIM, width=1)
+
+    playlist = page.get("playlist", "") or ""
+    if playlist:
+        f_pl = _get_font(11, layout)
+        pl_text = _truncate_to_fit(draw, playlist, f_pl, logo_x - 16)
+        _, pl_h = _text_size(draw, pl_text, f_pl)
+        draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
 
     # ── Album art ─────────────────────────────────────────────────────────────
     draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
@@ -911,7 +913,8 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
         BG      = _album_bg_color(art_img) if art_img else (25, 20, 20)
 
-        cache_key = (track, artist, album, art_url, ART_SIZE, W, H)
+        playlist  = page.get("playlist", "") or ""
+        cache_key = (track, artist, album, art_url, playlist, ART_SIZE, W, H)
         sc = _spotify_render_cache
 
         if sc["key"] != cache_key:

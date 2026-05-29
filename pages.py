@@ -312,6 +312,7 @@ def build_spotify_page(store: DataStore) -> dict | None:
         "art_url":     sp.get("art_url"),
         "progress_ms": sp.get("progress_ms", 0),
         "duration_ms": sp.get("duration_ms", 0),
+        "playlist":    sp.get("playlist", ""),
     }
 
 
