@@ -790,7 +790,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     # ── Header ─────────────────────────────────────────────────────────────────────────
     ICON_SIZE = 28
-    f_logo    = _get_font(18, layout)
+    f_logo    = _get_font(14, layout)
     spot_text = "Spotify"
     sw, sh    = _text_size(draw, spot_text, f_logo)
     logo_x    = W - 8 - sw - 6 - ICON_SIZE
@@ -801,7 +801,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     playlist = page.get("playlist", "") or ""
     if playlist:
-        f_pl = _get_font(18, layout)
+        f_pl = _get_font(14, layout)
         pl_text = _truncate_to_fit(draw, playlist, f_pl, logo_x - 16)
         _, pl_h = _text_size(draw, pl_text, f_pl)
         draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
@@ -817,8 +817,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     TEXT_W = W - TEXT_X - EDGE
     GAP    = 7
 
-    f_artist = _get_font(14, layout)
-    f_album  = _get_font(13, layout)
+    f_artist = _get_font(16, layout)
+    f_album  = _get_font(15, layout)
 
     track  = page.get("track",  "") or ""
     artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, TEXT_W)
@@ -829,7 +829,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     if track:
         f_track, title_line1, title_line2, th = _wrap_title(draw, track, TEXT_W, layout)
     else:
-        f_track = _get_font(18, layout)
+        f_track = _get_font(14, layout)
         th = _text_size(draw, "Ag", f_track)[1]
     _, ah = _text_size(draw, artist or " ", f_artist)
     _, lh = _text_size(draw, album  or " ", f_album)
@@ -859,7 +859,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     # ── Progress bar with elapsed / remaining ───────────────────────────────────
     BAR_Y       = H - BAR_ZONE + 6   # bar sits near top of the reserved zone
     T_Y         = BAR_Y + 8          # time text sits just below the bar
-    f_time      = _get_font(18, layout)
+    f_time      = _get_font(14, layout)
     duration_ms = page.get("duration_ms") or 0
     current_ms  = _interpolate_progress(track, page.get("progress_ms") or 0, duration_ms)
 
@@ -921,7 +921,7 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
             sc.update(
                 key=cache_key, bg_arr=_pil_to_arr(img),
                 BAR_Y=H - BAR_ZONE + 6, T_Y=H - BAR_ZONE + 6 + 8, EDGE=EDGE,
-                f_time=_get_font(18, layout),
+                f_time=_get_font(14, layout),
                 BG=BG, GREEN=(29, 185, 84), MUTED=ARTIST_C, DIM=(51, 51, 51),
             )
 
