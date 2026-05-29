@@ -587,30 +587,32 @@ def _adaptive_text_colors(bg: tuple) -> tuple:
     return title, (v_artist, v_artist, v_artist), (v_album, v_album, v_album)
 
 
-_spotify_icon_cache: dict = {}  # size → PIL Image (RGBA)
-_SPOTIFY_ICON_FILE = os.path.join(_BASE, "icons", "spotify_icon.png")
+_spotify_logo_cache: dict = {}  # h → PIL Image (RGBA, aspect-preserved)
+_SPOTIFY_LOGO_FILE = os.path.join(_BASE, "icons", "spotify_logo.png")
 
 
-def _load_spotify_icon(size: int) -> "Image.Image | None":
-    """Load icons/spotify_icon.png, resize to size×size. Returns None if file absent."""
+def _load_spotify_logo(target_h: int) -> "Image.Image | None":
+    """Load icons/spotify_logo.png scaled to target_h, preserving aspect ratio."""
     if not _PIL_AVAILABLE:
         return None
-    if size in _spotify_icon_cache:
-        return _spotify_icon_cache[size]
-    if not os.path.exists(_SPOTIFY_ICON_FILE):
+    if target_h in _spotify_logo_cache:
+        return _spotify_logo_cache[target_h]
+    if not os.path.exists(_SPOTIFY_LOGO_FILE):
         return None
     try:
-        img = Image.open(_SPOTIFY_ICON_FILE).convert("RGBA").resize(
-            (size, size), Image.LANCZOS)
-        _spotify_icon_cache[size] = img
-        return img
+        src = Image.open(_SPOTIFY_LOGO_FILE).convert("RGBA")
+        ow, oh = src.size
+        target_w = max(1, round(ow * target_h / oh))
+        out = src.resize((target_w, target_h), Image.LANCZOS)
+        _spotify_logo_cache[target_h] = out
+        return out
     except Exception as exc:
-        print(f"[render] spotify_icon.png: {exc}")
+        print(f"[render] spotify_logo.png: {exc}")
         return None
 
 
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
-    """Fallback: drawn Spotify circle icon (used when spotify_icon.png is absent)."""
+    """Fallback drawn Spotify circle icon (used when spotify_logo.png is absent)."""
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
     w = max(1, size // 7)
     ac_x = x + size // 5
@@ -809,23 +811,28 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ─────────────────────────────────────────────────────────────────────────
-    ICON_SIZE = 28
-    f_logo    = _get_font(14, layout)
-    spot_text = "Spotify"
-    sw, sh    = _text_size(draw, spot_text, f_logo)
-    logo_x    = W - 8 - sw - 6 - ICON_SIZE
-    icon_y    = (HEADER_H - ICON_SIZE) // 2
-    icon_img  = _load_spotify_icon(ICON_SIZE)
-    if icon_img is not None:
-        img.paste(icon_img, (logo_x, icon_y), icon_img)
+    LOGO_H   = HEADER_H - 10   # 5px padding top and bottom
+    logo_img = _load_spotify_logo(LOGO_H)
+    if logo_img is not None:
+        lw, lh  = logo_img.size
+        logo_x  = W - 8 - lw
+        logo_y  = (HEADER_H - lh) // 2
+        img.paste(logo_img, (logo_x, logo_y), logo_img)
     else:
+        # Fallback: drawn icon + "Spotify" text
+        ICON_SIZE = 28
+        f_logo    = _get_font(14, layout)
+        spot_text = "Spotify"
+        sw, sh    = _text_size(draw, spot_text, f_logo)
+        logo_x    = W - 8 - sw - 6 - ICON_SIZE
+        icon_y    = (HEADER_H - ICON_SIZE) // 2
         _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
-    draw.text((logo_x + ICON_SIZE + 6, (HEADER_H - sh) // 2),
-              spot_text, font=f_logo, fill=WHITE)
+        draw.text((logo_x + ICON_SIZE + 6, (HEADER_H - sh) // 2),
+                  spot_text, font=f_logo, fill=WHITE)
 
     playlist = page.get("playlist", "") or ""
     if playlist:
-        f_pl = _get_font(14, layout)
+        f_pl    = _get_font(14, layout)
         pl_text = _truncate_to_fit(draw, playlist, f_pl, logo_x - 16)
         _, pl_h = _text_size(draw, pl_text, f_pl)
         draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
