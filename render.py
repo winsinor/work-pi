@@ -695,14 +695,70 @@ _spotify_progress: dict = {"track": "", "base_ms": 0, "received_at": 0.0}
 
 
 def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int:
-    """Return progress_ms advanced by wall-clock time since last API update."""
+    """Return progress_ms advanced by wall-clock time since last API update.
+
+    Ignores API updates that are within 5 s of the current smooth estimate so
+    that normal 10-second polls don't cause visible jumps. Only resets when the
+    track changes or when the difference exceeds 5 s (user seek / resume after
+    pause).
+    """
     now = _time_mod.time()
     sp  = _spotify_progress
-    if track != sp["track"] or progress_ms != sp["base_ms"]:
+    if track != sp["track"]:
         sp["track"] = track; sp["base_ms"] = progress_ms; sp["received_at"] = now
+    elif sp["received_at"] == 0.0:
+        sp["base_ms"] = progress_ms; sp["received_at"] = now
+    else:
+        estimated = sp["base_ms"] + int((now - sp["received_at"]) * 1000)
+        if abs(progress_ms - estimated) > 5000:
+            sp["base_ms"] = progress_ms; sp["received_at"] = now
     elapsed_ms = int((now - sp["received_at"]) * 1000)
     current    = sp["base_ms"] + elapsed_ms
     return min(current, duration_ms) if duration_ms > 0 else current
+
+
+def _wrap_title(draw, track: str, TEXT_W: int, layout: dict):
+    """Word-wrap track title to 2 lines, shrinking font up to 20% to avoid truncation.
+
+    Tries sizes from 18pt down to 14pt (≈80%). Stops as soon as both lines fit
+    without truncation. If no size avoids truncation, accepts it at 14pt.
+    Returns (font, line1, line2, line_height).
+    """
+    BASE_PT = 18
+    MIN_PT  = round(BASE_PT * 0.80)  # 14
+    for pt in range(BASE_PT, MIN_PT - 1, -1):
+        f  = _get_font(pt, layout)
+        tw = _text_size(draw, track, f)[0]
+        th = _text_size(draw, " ", f)[1]
+        if tw <= TEXT_W:
+            return f, track, "", th
+        words = track.split()
+        last_fit = 0
+        for i in range(1, len(words) + 1):
+            if _text_size(draw, " ".join(words[:i]), f)[0] <= TEXT_W:
+                last_fit = i
+            else:
+                break
+        if last_fit == 0:
+            return f, _truncate_to_fit(draw, track, f, TEXT_W), "", th
+        remainder = " ".join(words[last_fit:])
+        if _text_size(draw, remainder, f)[0] <= TEXT_W:
+            return f, " ".join(words[:last_fit]), remainder, th
+        # line 2 overflows — try a smaller size
+    # Smallest size still overflows — truncate line 2
+    f  = _get_font(MIN_PT, layout)
+    th = _text_size(draw, " ", f)[1]
+    words = track.split()
+    last_fit = 0
+    for i in range(1, len(words) + 1):
+        if _text_size(draw, " ".join(words[:i]), f)[0] <= TEXT_W:
+            last_fit = i
+        else:
+            break
+    if last_fit == 0:
+        return f, _truncate_to_fit(draw, track, f, TEXT_W), "", th
+    return (f, " ".join(words[:last_fit]),
+            _truncate_to_fit(draw, " ".join(words[last_fit:]), f, TEXT_W), th)
 
 
 def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
@@ -760,7 +816,6 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     TEXT_W = W - TEXT_X - EDGE
     GAP    = 7
 
-    f_track  = _get_font(18, layout)
     f_artist = _get_font(14, layout)
     f_album  = _get_font(13, layout)
 
@@ -768,29 +823,15 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, TEXT_W)
     album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  TEXT_W)
 
-    # Word-wrap the track title to 2 lines instead of scrolling
-    _, th = _text_size(draw, track  or " ", f_track)
-    _, ah = _text_size(draw, artist or " ", f_artist)
-    _, lh = _text_size(draw, album  or " ", f_album)
-
+    # Word-wrap title to 2 lines; shrink font up to 20% to avoid truncation
     title_line1 = title_line2 = ""
     if track:
-        tw, _ = _text_size(draw, track, f_track)
-        if tw <= TEXT_W:
-            title_line1 = track
-        else:
-            words = track.split()
-            last_fit = 0
-            for i in range(1, len(words) + 1):
-                if _text_size(draw, " ".join(words[:i]), f_track)[0] <= TEXT_W:
-                    last_fit = i
-                else:
-                    break
-            if last_fit == 0:
-                title_line1 = _truncate_to_fit(draw, track, f_track, TEXT_W)
-            else:
-                title_line1 = " ".join(words[:last_fit])
-                title_line2 = _truncate_to_fit(draw, " ".join(words[last_fit:]), f_track, TEXT_W)
+        f_track, title_line1, title_line2, th = _wrap_title(draw, track, TEXT_W, layout)
+    else:
+        f_track = _get_font(18, layout)
+        th = _text_size(draw, " ", f_track)[1]
+    _, ah = _text_size(draw, artist or " ", f_artist)
+    _, lh = _text_size(draw, album  or " ", f_album)
 
     TITLE_GAP = 2
     # Anchor artist/album using a 1-line block so their positions are stable.
