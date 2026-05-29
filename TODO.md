@@ -27,6 +27,10 @@
 
 ## Features
 
+- **Waypoint → Home route**: add a third commute route (waypoint → home direct, no
+  work stop) shown when a waypoint address is configured. Useful for days when
+  commuting from the waypoint location rather than the office.
+
 - **Stale-data indicator**: show a subtle visual warning (dim border, faded clock,
   or "!" badge) when the last successful data fetch is older than 2× the poll
   interval. Track `last_fetched_at` per data source in `DataStore`; check on each
