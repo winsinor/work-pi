@@ -21,10 +21,10 @@ import config as cfg_module
 import setup_server
 import stats as stats_mod
 import touch as touch_mod
-from data import DataStore
+from data import DataStore, local_now
 from pages import (
     build_setup_page, build_loading_page, build_shutdown_page,
-    get_display,
+    build_sleep_page, get_display,
 )
 from render import (
     load_layout, render_page_rgb565, solid_frame,
@@ -45,6 +45,28 @@ _prerender_started: set  = set()
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
+
+# Sleep mode: timestamp of last manual wake (0 = never woken)
+_sleep_woke_at: float = 0.0
+
+
+def _in_sleep_window(cfg: dict, now_dt) -> bool:
+    sc = cfg.get("sleep", {})
+    if not sc.get("enabled", False):
+        return False
+    start_h   = sc.get("start_h", 22)
+    end_h     = sc.get("end_h", 7)
+    days      = sc.get("days", list(range(7)))
+    now_h     = now_dt.hour
+    overnight = start_h > end_h
+    if overnight:
+        in_time   = now_h >= start_h or now_h < end_h
+        # attribute past-midnight hours to the day the sleep window started
+        check_dow = now_dt.weekday() if now_h >= start_h else (now_dt.weekday() - 1) % 7
+    else:
+        in_time   = start_h <= now_h < end_h
+        check_dow = now_dt.weekday()
+    return in_time and (check_dow in days)
 
 # ── Framebuffer helpers ───────────────────────────────────────────────────────────────
 
@@ -280,7 +302,7 @@ def main():
     default_dwell = cfg["display"].get("page_dwell_s", 8)
     font_path = cfg_module.resolve_font_path(cfg)
 
-    global _spotify_page_active
+    global _spotify_page_active, _sleep_woke_at
 
     layout = load_layout(font_path, display_w=W, display_h=H)
 
@@ -362,6 +384,21 @@ def main():
     while True:
         layout = load_layout(font_path, display_w=W, display_h=H)
 
+        # ── Sleep mode ────────────────────────────────────────────────────────
+        _now_dt = local_now(cfg)
+        _asleep = _in_sleep_window(cfg, _now_dt)
+        _wake_s = cfg.get("sleep", {}).get("wake_minutes", 60) * 60
+        _manually_awake = (time.time() - _sleep_woke_at) < _wake_s
+        if _asleep and not _manually_awake:
+            _spotify_page_active = False
+            _write_frame(render_page_rgb565(build_sleep_page(), layout, rotate_180=(rot == 180)), fb)
+            try:
+                _nav_q.get(timeout=30)
+                _sleep_woke_at = time.time()
+            except queue.Empty:
+                pass
+            continue
+
         display = get_display(store)
         pages   = list(display.get("pages") or []) if display else None
         if not pages:
@@ -374,7 +411,6 @@ def main():
             _ci_cfg   = cfg.get("custom_images", {})
             _ci_start = _ci_cfg.get("display_start_h", 0)
             _ci_end   = _ci_cfg.get("display_end_h", 23)
-            from data import local_now
             _now_h = local_now(cfg).hour
             _in_window = (_ci_start <= _ci_end and _ci_start <= _now_h <= _ci_end) or \
                          (_ci_start > _ci_end and (_now_h >= _ci_start or _now_h <= _ci_end))

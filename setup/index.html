@@ -413,6 +413,44 @@
       </div>
     </div>
     <div class="section">
+      <div class="section-title">Sleep Mode</div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" id="sleep-enabled" style="width:auto"> Enable sleep mode
+        </label>
+        <p class="hint">Display shows "zzz" during sleep hours. Touch or press any button to wake for the configured duration.</p>
+      </div>
+      <div id="sleep-settings">
+        <div class="row">
+          <div class="field">
+            <label>Sleep from</label>
+            <select id="sleep-start-h"></select>
+          </div>
+          <div class="field">
+            <label>Sleep until</label>
+            <select id="sleep-end-h"></select>
+          </div>
+          <div class="field">
+            <label>Wake duration (minutes)</label>
+            <input type="number" id="sleep-wake-min" min="1" max="480" value="60">
+            <p class="hint">How long to stay awake after a press before returning to sleep.</p>
+          </div>
+        </div>
+        <div class="field">
+          <label>Sleep on days</label>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="0"> Mon</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="1"> Tue</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="2"> Wed</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="3"> Thu</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="4"> Fri</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="5"> Sat</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="6"> Sun</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title">GPIO Buttons</div>
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
@@ -685,6 +723,17 @@ bindRange('int-weather',  'int-weather-val',  fmtSec);
 bindRange('int-commute',  'int-commute-val',  fmtSec);
 bindRange('int-calendar', 'int-calendar-val', fmtSec);
 
+// Populate sleep hour selects (0–23)
+['sleep-start-h', 'sleep-end-h'].forEach(id => {
+  const sel = $(id);
+  for (let h = 0; h < 24; h++) {
+    const label = h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h-12}:00 PM`;
+    sel.add(new Option(label, h));
+  }
+});
+$('sleep-start-h').value = 22;
+$('sleep-end-h').value   = 7;
+
 $('btn-enabled').addEventListener('change', () => {
   $('btn-config-fields').style.display = $('btn-enabled').checked ? '' : 'none';
 });
@@ -752,6 +801,16 @@ function populateForm(cfg) {
 
   $('ci-start-h').value = cfg.custom_images?.display_start_h ?? 0;
   $('ci-end-h').value   = cfg.custom_images?.display_end_h   ?? 23;
+
+  const sl = cfg.sleep || {};
+  $('sleep-enabled').checked   = sl.enabled || false;
+  $('sleep-start-h').value     = sl.start_h   ?? 22;
+  $('sleep-end-h').value       = sl.end_h     ?? 7;
+  $('sleep-wake-min').value    = sl.wake_minutes ?? 60;
+  const slDays = sl.days ?? [0,1,2,3,4,5,6];
+  document.querySelectorAll('.sleep-day').forEach(cb => {
+    cb.checked = slDays.includes(parseInt(cb.value));
+  });
 
   $('commute-start').value    = cfg.commute?.window_start_h ?? 15;
   $('commute-end').value      = cfg.commute?.window_end_h   ?? 18;
@@ -825,6 +884,13 @@ function collectForm() {
     custom_images: {
       display_start_h: +$('ci-start-h').value,
       display_end_h:   +$('ci-end-h').value,
+    },
+    sleep: {
+      enabled:      $('sleep-enabled').checked,
+      start_h:      +$('sleep-start-h').value,
+      end_h:        +$('sleep-end-h').value,
+      wake_minutes: +$('sleep-wake-min').value,
+      days:         [...document.querySelectorAll('.sleep-day:checked')].map(cb => parseInt(cb.value)),
     },
     setup_port: +$('setup-port').value,
   };

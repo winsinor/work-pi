@@ -279,6 +279,14 @@ def build_error_page(msg: str) -> dict:
     }
 
 
+def build_sleep_page() -> dict:
+    return {
+        "_name": "sleep",
+        "title": "",
+        "lines": [{"text": "zzz", "size": 3, "color": "darkgrey"}],
+    }
+
+
 def build_shutdown_page() -> dict:
     return {
         "_name": "shutdown",
