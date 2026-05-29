@@ -29,7 +29,7 @@ from pages import (
 )
 from render import (
     load_layout, render_page_rgb565, render_sleep_frame, solid_frame,
-    linescan_transition, invalidate_layout_cache,
+    invalidate_layout_cache,
     spotify_needs_scroll, spotify_scroll_complete,
     calendar_needs_scroll, calendar_scroll_complete,
     prefetch_spotify_art,
@@ -46,10 +46,6 @@ _prerender_started: set  = set()
 
 
 _ci_files_cache: dict = {"mtime": -1.0, "files": []}
-
-# Linescan transition state
-_last_frame:        bytes | None = None
-_page_just_changed: bool         = False
 
 # Sleep mode: timestamp of last manual wake (0 = never woken)
 _sleep_woke_at: float = 0.0
@@ -313,7 +309,6 @@ def main():
     font_path = cfg_module.resolve_font_path(cfg)
 
     global _spotify_page_active, _sleep_woke_at, _sleep_x_off, _sleep_y_off, _sleep_dx, _sleep_dy
-    global _last_frame, _page_just_changed
 
     layout = load_layout(font_path, display_w=W, display_h=H)
 
@@ -472,12 +467,7 @@ def main():
                 print(f"[render] {exc}")
                 frame = None
             if frame:
-                if _page_just_changed and _last_frame is not None:
-                    for _tf in linescan_transition(_last_frame, frame, W, H):
-                        _write_frame(_tf, fb)
                 _write_frame(frame, fb)
-                _last_frame = frame
-            _page_just_changed = False
             scroll_active = (_pn == "spotify" and spotify_needs_scroll()) or \
                             (_pn == "calendar" and calendar_needs_scroll())
             scroll_done   = (_pn == "spotify" and spotify_scroll_complete()) or \
@@ -500,7 +490,6 @@ def main():
                 delta = _nav_q.get(timeout=wait)
                 idx = (idx + delta) % len(pages)
                 _page_entered = time.time()
-                _page_just_changed = True
                 store.display.fetched_at = 0.0
             except queue.Empty:
                 elapsed = time.time() - _page_entered
@@ -511,7 +500,6 @@ def main():
                     elif elapsed >= dwell:
                         idx = (idx + 1) % len(pages)
                         _page_entered = time.time()
-                        _page_just_changed = True
                         store.display.fetched_at = 0.0
                     # else: within dwell, keep fast-ticking
                 elif scroll_active and elapsed < dwell * 3:
@@ -520,12 +508,10 @@ def main():
                     else:
                         idx = (idx + 1) % len(pages)
                         _page_entered = time.time()
-                        _page_just_changed = True
                         store.display.fetched_at = 0.0
                 else:
                     idx = (idx + 1) % len(pages)
                     _page_entered = time.time()
-                    _page_just_changed = True
                     store.display.fetched_at = 0.0
 
 
