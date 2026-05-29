@@ -184,14 +184,17 @@ def _start_fetch_threads(store: DataStore):
                 time.sleep(30)
 
     def _commute_loop():
-        from data import fetch_commute, in_commute_window
+        from data import fetch_commute, in_commute_window, _is_auth_error
         while True:
             _fetch_gate.wait()
             _wait_for_spotify_clear()
             if in_commute_window(cfg):
                 try:
                     store.commute.set(fetch_commute(store))
+                    store.commute_auth_error = False
                 except Exception as exc:
+                    if _is_auth_error(exc):
+                        store.commute_auth_error = True
                     print(f"[commute] {exc}")
                     time.sleep(30)
                     continue

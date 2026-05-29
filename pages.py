@@ -149,6 +149,12 @@ def build_commute_page(store: DataStore) -> dict | None:
 
     if not in_commute_window(cfg):
         return None
+    if store.commute_auth_error:
+        return _cfg_err("commute", [
+            {"text": "TomTom key invalid", "size": 1, "color": "red"},
+            {"text": "401 Unauthorized", "size": 1, "color": "darkgrey"},
+            {"text": "Update key in setup", "size": 0, "color": "darkgrey"},
+        ])
     data  = get_commute(store)
     if not data:
         return None

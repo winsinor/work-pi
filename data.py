@@ -81,6 +81,7 @@ class DataStore:
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self._coords: dict[str, tuple[float, float]] = {}
+        self.commute_auth_error: bool = False
 
         ttl_w   = cfg["weather"]["update_interval_s"]
         ttl_c   = cfg["commute"]["update_interval_s"]
@@ -266,12 +267,21 @@ def fetch_commute(store: DataStore) -> dict:
     return {"routes": routes, "updated_at": int(time.time())}
 
 
+def _is_auth_error(exc: Exception) -> bool:
+    from requests.exceptions import HTTPError
+    return isinstance(exc, HTTPError) and exc.response is not None \
+        and exc.response.status_code in (401, 403)
+
+
 def get_commute(store: DataStore) -> dict:
     if in_commute_window(store.cfg):
         if not store.commute.fresh():
             try:
                 store.commute.set(fetch_commute(store))
+                store.commute_auth_error = False
             except Exception as exc:
+                if _is_auth_error(exc):
+                    store.commute_auth_error = True
                 print(f"[commute] fetch failed: {exc}")
     return store.commute.get() or {}
 
