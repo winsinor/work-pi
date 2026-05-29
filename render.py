@@ -727,9 +727,8 @@ def _wrap_title(draw, track: str, TEXT_W: int, layout: dict):
     BASE_PT = 18
     MIN_PT  = round(BASE_PT * 0.80)  # 14
     for pt in range(BASE_PT, MIN_PT - 1, -1):
-        f  = _get_font(pt, layout)
-        tw = _text_size(draw, track, f)[0]
-        th = _text_size(draw, " ", f)[1]
+        f        = _get_font(pt, layout)
+        tw, th   = _text_size(draw, track, f)
         if tw <= TEXT_W:
             return f, track, "", th
         words = track.split()
@@ -746,8 +745,8 @@ def _wrap_title(draw, track: str, TEXT_W: int, layout: dict):
             return f, " ".join(words[:last_fit]), remainder, th
         # line 2 overflows — try a smaller size
     # Smallest size still overflows — truncate line 2
-    f  = _get_font(MIN_PT, layout)
-    th = _text_size(draw, " ", f)[1]
+    f       = _get_font(MIN_PT, layout)
+    _, th   = _text_size(draw, track, f)
     words = track.split()
     last_fit = 0
     for i in range(1, len(words) + 1):
@@ -829,7 +828,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         f_track, title_line1, title_line2, th = _wrap_title(draw, track, TEXT_W, layout)
     else:
         f_track = _get_font(18, layout)
-        th = _text_size(draw, " ", f_track)[1]
+        th = _text_size(draw, "Ag", f_track)[1]
     _, ah = _text_size(draw, artist or " ", f_artist)
     _, lh = _text_size(draw, album  or " ", f_album)
 
