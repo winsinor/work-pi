@@ -1353,6 +1353,28 @@ def render_page_rgb565(page: dict, layout: dict | None = None,
     return _rotate_rgb565(data) if rotate_180 else data
 
 
+def linescan_transition(old_bytes: bytes, new_bytes: bytes,
+                        W: int, H: int, steps: int = 24) -> list:
+    """Return RGB565 frame bytes for a top-to-bottom line-scan reveal.
+
+    Each frame exposes the next band of new_bytes over old_bytes with no
+    added artifacts — just the content itself sweeping in. The SPI write
+    time (~15 ms/frame on Pi 1B+) provides natural pacing (~360 ms total).
+    Falls back to [new_bytes] when numpy is unavailable.
+    """
+    if not _NUMPY or not old_bytes:
+        return [new_bytes]
+    old_arr = _np.frombuffer(old_bytes, '<u2').reshape(H, W).copy()
+    new_arr = _np.frombuffer(new_bytes, '<u2').reshape(H, W)
+    frames = []
+    for step in range(steps):
+        reveal = (step + 1) * H // steps
+        f = old_arr.copy()
+        f[:reveal] = new_arr[:reveal]
+        frames.append(f.tobytes())
+    return frames
+
+
 def render_sleep_frame(W: int, H: int, x_off: int = 0, y_off: int = 0,
                        rotate_180: bool = False, layout: dict | None = None) -> bytes:
     """Render a black screensaver frame with 'zzz' shifted by (x_off, y_off) from center."""
