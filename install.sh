@@ -178,6 +178,24 @@ ln -sf "$SCRIPT_DIR/deploy" /usr/local/bin/deploy
 chmod +x "$SCRIPT_DIR/deploy"
 green "    'deploy' available system-wide"
 
+# ── auto-deploy timer (pull from GitHub every 2 min, restart only on changes) ─
+info "==> Installing auto-deploy timer …"
+chmod +x "$SCRIPT_DIR/auto-deploy.sh"
+
+# Sudoers rule so the pi user can restart the service non-interactively
+SUDOERS_LINE="pi ALL=(ALL) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}.service"
+echo "$SUDOERS_LINE" > /etc/sudoers.d/work-dashboard-deploy
+chmod 440 /etc/sudoers.d/work-dashboard-deploy
+
+# Install unit files with the repo path substituted in
+sed "s|__REPO__|$SCRIPT_DIR|g" "$SCRIPT_DIR/auto-deploy.service" \
+    > /etc/systemd/system/auto-deploy.service
+cp "$SCRIPT_DIR/auto-deploy.timer" /etc/systemd/system/auto-deploy.timer
+
+systemctl daemon-reload
+systemctl enable --now auto-deploy.timer
+green "    auto-deploy.timer active — pulls every 2 min, restarts only on new commits"
+
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
 green "==> Installation complete!"

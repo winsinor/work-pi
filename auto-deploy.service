@@ -1,0 +1,12 @@
+[Unit]
+Description=Auto-deploy work-pi from GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=__REPO__
+ExecStart=__REPO__/auto-deploy.sh
+StandardOutput=journal
+StandardError=journal

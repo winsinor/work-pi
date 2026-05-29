@@ -1,0 +1,11 @@
+[Unit]
+Description=Auto-deploy work-pi every 2 minutes
+After=network-online.target
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=auto-deploy.service
+
+[Install]
+WantedBy=timers.target
