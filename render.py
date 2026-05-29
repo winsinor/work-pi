@@ -587,12 +587,32 @@ def _adaptive_text_colors(bg: tuple) -> tuple:
     return title, (v_artist, v_artist, v_artist), (v_album, v_album, v_album)
 
 
+_spotify_icon_cache: dict = {}  # size → PIL Image (RGBA)
+_SPOTIFY_ICON_FILE = os.path.join(_BASE, "icons", "spotify_icon.png")
+
+
+def _load_spotify_icon(size: int) -> "Image.Image | None":
+    """Load icons/spotify_icon.png, resize to size×size. Returns None if file absent."""
+    if not _PIL_AVAILABLE:
+        return None
+    if size in _spotify_icon_cache:
+        return _spotify_icon_cache[size]
+    if not os.path.exists(_SPOTIFY_ICON_FILE):
+        return None
+    try:
+        img = Image.open(_SPOTIFY_ICON_FILE).convert("RGBA").resize(
+            (size, size), Image.LANCZOS)
+        _spotify_icon_cache[size] = img
+        return img
+    except Exception as exc:
+        print(f"[render] spotify_icon.png: {exc}")
+        return None
+
+
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
-    """Spotify circle icon: green disc + 3 white arcs from lower-left focal point."""
+    """Fallback: drawn Spotify circle icon (used when spotify_icon.png is absent)."""
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
     w = max(1, size // 7)
-    # Focal point inside the circle at lower-left quadrant (≈20% from left, 80% down).
-    # Arcs with increasing radius sweep from near-top to upper-right, staying inside the disc.
     ac_x = x + size // 5
     ac_y = y + (size * 4) // 5
     for arc_r in [size * 10 // 22, size * 14 // 22, size * 18 // 22]:
@@ -795,7 +815,11 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     sw, sh    = _text_size(draw, spot_text, f_logo)
     logo_x    = W - 8 - sw - 6 - ICON_SIZE
     icon_y    = (HEADER_H - ICON_SIZE) // 2
-    _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
+    icon_img  = _load_spotify_icon(ICON_SIZE)
+    if icon_img is not None:
+        img.paste(icon_img, (logo_x, icon_y), icon_img)
+    else:
+        _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
     draw.text((logo_x + ICON_SIZE + 6, (HEADER_H - sh) // 2),
               spot_text, font=f_logo, fill=WHITE)
 
