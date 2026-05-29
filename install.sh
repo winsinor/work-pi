@@ -183,7 +183,7 @@ info "==> Installing auto-deploy timer …"
 chmod +x "$SCRIPT_DIR/auto-deploy.sh"
 
 # Sudoers rule so the pi user can restart the service non-interactively
-SUDOERS_LINE="pi ALL=(ALL) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}.service"
+SUDOERS_LINE="pi ALL=(ALL) NOPASSWD: /bin/systemctl restart ${SERVICE_NAME}, /bin/systemctl restart ${SERVICE_NAME}.service, /usr/bin/rsync"
 echo "$SUDOERS_LINE" > /etc/sudoers.d/work-dashboard-deploy
 chmod 440 /etc/sudoers.d/work-dashboard-deploy
 

@@ -11,7 +11,7 @@ echo "==> Pulling latest …"
 git pull origin main
 
 echo "==> Syncing to $INSTALL_DIR …"
-rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
     "$REPO/" "$INSTALL_DIR/"
 
 echo "==> Restarting $SERVICE …"
