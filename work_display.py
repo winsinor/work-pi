@@ -24,10 +24,10 @@ import touch as touch_mod
 from data import DataStore, local_now
 from pages import (
     build_setup_page, build_loading_page, build_shutdown_page,
-    build_sleep_page, get_display,
+    get_display,
 )
 from render import (
-    load_layout, render_page_rgb565, solid_frame,
+    load_layout, render_page_rgb565, render_sleep_frame, solid_frame,
     invalidate_layout_cache,
     spotify_needs_scroll, spotify_scroll_complete,
     calendar_needs_scroll, calendar_scroll_complete,
@@ -48,6 +48,11 @@ _ci_files_cache: dict = {"mtime": -1.0, "files": []}
 
 # Sleep mode: timestamp of last manual wake (0 = never woken)
 _sleep_woke_at: float = 0.0
+# Screensaver drift state — position offsets from screen centre and step direction
+_sleep_x_off: int = 0
+_sleep_y_off: int = 0
+_sleep_dx: int    = 20   # px per tick
+_sleep_dy: int    = 15
 
 
 def _in_sleep_window(cfg: dict, now_dt) -> bool:
@@ -302,7 +307,7 @@ def main():
     default_dwell = cfg["display"].get("page_dwell_s", 8)
     font_path = cfg_module.resolve_font_path(cfg)
 
-    global _spotify_page_active, _sleep_woke_at
+    global _spotify_page_active, _sleep_woke_at, _sleep_x_off, _sleep_y_off, _sleep_dx, _sleep_dy
 
     layout = load_layout(font_path, display_w=W, display_h=H)
 
@@ -391,7 +396,17 @@ def main():
         _manually_awake = (time.time() - _sleep_woke_at) < _wake_s
         if _asleep and not _manually_awake:
             _spotify_page_active = False
-            _write_frame(render_page_rgb565(build_sleep_page(), layout, rotate_180=(rot == 180)), fb)
+            # Bounce "zzz" around the screen (screensaver drift, ≈30s per step)
+            _sleep_x_off += _sleep_dx
+            _sleep_y_off += _sleep_dy
+            if abs(_sleep_x_off) >= 60:
+                _sleep_dx = -_sleep_dx
+                _sleep_x_off = max(-60, min(60, _sleep_x_off))
+            if abs(_sleep_y_off) >= 40:
+                _sleep_dy = -_sleep_dy
+                _sleep_y_off = max(-40, min(40, _sleep_y_off))
+            _write_frame(render_sleep_frame(W, H, _sleep_x_off, _sleep_y_off,
+                                            rotate_180=(rot == 180), layout=layout), fb)
             try:
                 _nav_q.get(timeout=30)
                 _sleep_woke_at = time.time()

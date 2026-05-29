@@ -1311,6 +1311,30 @@ def render_page_rgb565(page: dict, layout: dict | None = None,
     return _rotate_rgb565(data) if rotate_180 else data
 
 
+def render_sleep_frame(W: int, H: int, x_off: int = 0, y_off: int = 0,
+                       rotate_180: bool = False, layout: dict | None = None) -> bytes:
+    """Render a black screensaver frame with 'zzz' shifted by (x_off, y_off) from center."""
+    img  = Image.new("RGB", (W, H), (0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    font = _get_font(64, layout or {"font": {"path": ""}})
+    text = "zzz"
+    tw, th = _text_size(draw, text, font)
+    x = max(0, min((W - tw) // 2 + x_off, W - tw))
+    y = max(0, min((H - th) // 2 + y_off, H - th))
+    draw.text((x, y), text, font=font, fill=(70, 70, 70))
+    data = _img_to_rgb565(img)
+    if rotate_180 and _NUMPY:
+        data = _np.frombuffer(data, '<u2')[::-1].tobytes()
+    elif rotate_180:
+        n   = len(data) // 2
+        buf = bytearray(n * 2)
+        for i in range(n):
+            j = n - 1 - i
+            buf[i*2], buf[i*2+1] = data[j*2], data[j*2+1]
+        data = bytes(buf)
+    return data
+
+
 def solid_frame(W: int, H: int, color_rgb: tuple[int, int, int]) -> bytes:
     """Return a solid-color RGB565 frame (for shutdown/error states)."""
     r, g, b = color_rgb
