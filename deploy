@@ -3,11 +3,16 @@
 set -euo pipefail
 
 REPO="/home/pi/work-pi"
+INSTALL_DIR="/home/pi/work-dashboard"
 SERVICE="work-dashboard"
 
 cd "$REPO"
 echo "==> Pulling latest …"
 git pull origin main
+
+echo "==> Syncing to $INSTALL_DIR …"
+rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+    "$REPO/" "$INSTALL_DIR/"
 
 echo "==> Restarting $SERVICE …"
 sudo systemctl restart "$SERVICE"

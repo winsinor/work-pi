@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # auto-deploy.sh — pull from main and restart only when there are new commits
 REPO="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+INSTALL_DIR="/home/pi/work-dashboard"
 SERVICE="work-dashboard"
 
 cd "$REPO"
@@ -22,5 +23,7 @@ echo "[auto-deploy] $(date '+%Y-%m-%d %H:%M:%S') — new commits, deploying…"
 git log --oneline "$LOCAL..$REMOTE"
 
 git pull origin main
+rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+    "$REPO/" "$INSTALL_DIR/"
 sudo systemctl restart "$SERVICE"
 echo "[auto-deploy] done"
