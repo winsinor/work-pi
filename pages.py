@@ -96,7 +96,7 @@ def build_weather_page(store: DataStore) -> dict:
         rain_color = ("cyan"   if pp >= 60 else
                       "yellow" if pp >= 40 else
                       "white"  if pp >= 20 else "darkgrey")
-        grid.append({"label": label, "temp": f"{tp:.0f}\xb0",
+        grid.append({"label": label, "temp": f"{tp:.0f}°",
                      "rain": f"{pp}%", "rain_color": rain_color})
 
     page = {
