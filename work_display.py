@@ -5,6 +5,7 @@ Fetches data directly (no server), renders pages with PIL, and writes
 RGB565 frames to the framebuffer. On first run (no config), shows a
 setup URL and starts the web config server.
 """
+from __future__ import annotations
 
 import glob
 import os
