@@ -588,18 +588,15 @@ def _adaptive_text_colors(bg: tuple) -> tuple:
 
 
 def _draw_spotify_icon(draw, x: int, y: int, size: int, green):
-    """Approximate Spotify circle icon: green disc with 3 arcs concentric from lower-left."""
-    r = size // 2
-    cx, cy = x + r, y + r
+    """Spotify circle icon: green disc + 3 white arcs from lower-left focal point."""
     draw.ellipse([x, y, x + size - 1, y + size - 1], fill=green)
-    w = max(1, size // 8)
-    # Arc centre at lower-left; arcs 280°–335° sweep the upper-right portion,
-    # producing three tilted horizontal waves like the real Spotify logo.
-    ac_x = x + size // 5
-    ac_y = y + size
-    for arc_r in [size * 9 // 22, size * 13 // 22, size * 17 // 22]:
+    w = max(1, size // 7)
+    # Focal point: lower-left outside the circle, matching the real logo geometry.
+    ac_x = x + size // 7
+    ac_y = y + size + size // 6
+    for arc_r in [size * 8 // 22, size * 12 // 22, size * 16 // 22]:
         bb = [ac_x - arc_r, ac_y - arc_r, ac_x + arc_r, ac_y + arc_r]
-        draw.arc(bb, start=280, end=335, fill=(255, 255, 255), width=w)
+        draw.arc(bb, start=272, end=330, fill=(255, 255, 255), width=w)
 
 
 # ── Numpy fast-path helpers ───────────────────────────────────────────────────────────────
@@ -770,7 +767,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     GREEN        = (29, 185,  84)
     DIM          = (51,  51,  51)
 
-    HEADER_H  = 28
+    HEADER_H  = 42
     BAR_ZONE  = 26   # px reserved at bottom (bar + time labels + edge clearance)
     EDGE      = 8    # minimum margin from display edges
     CONTENT_Y = HEADER_H + 1
@@ -791,19 +788,19 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ─────────────────────────────────────────────────────────────────────────
-    ICON_SIZE = 19
-    f_logo    = _get_font(12, layout)
+    ICON_SIZE = 28
+    f_logo    = _get_font(18, layout)
     spot_text = "Spotify"
     sw, sh    = _text_size(draw, spot_text, f_logo)
-    logo_x    = W - 8 - sw - 4 - ICON_SIZE
+    logo_x    = W - 8 - sw - 6 - ICON_SIZE
     icon_y    = (HEADER_H - ICON_SIZE) // 2
     _draw_spotify_icon(draw, logo_x, icon_y, ICON_SIZE, GREEN)
-    draw.text((logo_x + ICON_SIZE + 4, (HEADER_H - sh) // 2),
+    draw.text((logo_x + ICON_SIZE + 6, (HEADER_H - sh) // 2),
               spot_text, font=f_logo, fill=WHITE)
 
     playlist = page.get("playlist", "") or ""
     if playlist:
-        f_pl = _get_font(11, layout)
+        f_pl = _get_font(18, layout)
         pl_text = _truncate_to_fit(draw, playlist, f_pl, logo_x - 16)
         _, pl_h = _text_size(draw, pl_text, f_pl)
         draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
@@ -895,7 +892,7 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
     try:
         W = layout["canvas"]["width"]
         H = layout["canvas"]["height"]
-        HEADER_H  = 28
+        HEADER_H  = 42
         BAR_ZONE  = 26
         EDGE      = 8
         CONTENT_Y = HEADER_H + 1
