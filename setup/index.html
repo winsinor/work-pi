@@ -437,7 +437,7 @@
           </div>
         </div>
         <div class="field">
-          <label>Sleep on days</label>
+          <label>Sleep on days (time window above)</label>
           <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px">
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="0"> Mon</label>
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="1"> Tue</label>
@@ -447,6 +447,19 @@
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="5"> Sat</label>
             <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-day" value="6"> Sun</label>
           </div>
+        </div>
+        <div class="field">
+          <label>All-day sleep (entire day, ignores time window)</label>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:6px">
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="0"> Mon</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="1"> Tue</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="2"> Wed</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="3"> Thu</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="4"> Fri</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="5"> Sat</label>
+            <label style="display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" class="sleep-allday" value="6"> Sun</label>
+          </div>
+          <p class="hint">Checked days sleep all 24 hours. Background data fetching is also paused on these days.</p>
         </div>
       </div>
     </div>
@@ -811,6 +824,10 @@ function populateForm(cfg) {
   document.querySelectorAll('.sleep-day').forEach(cb => {
     cb.checked = slDays.includes(parseInt(cb.value));
   });
+  const slAllDay = sl.all_day_days ?? [];
+  document.querySelectorAll('.sleep-allday').forEach(cb => {
+    cb.checked = slAllDay.includes(parseInt(cb.value));
+  });
 
   $('commute-start').value    = cfg.commute?.window_start_h ?? 15;
   $('commute-end').value      = cfg.commute?.window_end_h   ?? 18;
@@ -891,6 +908,7 @@ function collectForm() {
       end_h:        +$('sleep-end-h').value,
       wake_minutes: +$('sleep-wake-min').value,
       days:         [...document.querySelectorAll('.sleep-day:checked')].map(cb => parseInt(cb.value)),
+      all_day_days: [...document.querySelectorAll('.sleep-allday:checked')].map(cb => parseInt(cb.value)),
     },
     setup_port: +$('setup-port').value,
   };

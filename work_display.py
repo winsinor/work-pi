@@ -55,11 +55,19 @@ _sleep_y_off: int = 0
 _sleep_dx: int    = 20   # px per tick
 _sleep_dy: int    = 15
 
+# Gate that fetch threads wait on — cleared while fully asleep, set when awake.
+_fetch_gate = threading.Event()
+_fetch_gate.set()
+
 
 def _in_sleep_window(cfg: dict, now_dt) -> bool:
     sc = cfg.get("sleep", {})
     if not sc.get("enabled", False):
         return False
+    # All-day sleep days take priority over the hourly window
+    all_day = sc.get("all_day_days", [])
+    if now_dt.weekday() in all_day:
+        return True
     start_h   = sc.get("start_h", 22)
     end_h     = sc.get("end_h", 7)
     days      = sc.get("days", list(range(7)))
@@ -166,6 +174,7 @@ def _start_fetch_threads(store: DataStore):
     def _weather_loop():
         from data import fetch_weather
         while True:
+            _fetch_gate.wait()
             _wait_for_spotify_clear()
             try:
                 store.weather.set(fetch_weather(store))
@@ -177,6 +186,7 @@ def _start_fetch_threads(store: DataStore):
     def _commute_loop():
         from data import fetch_commute, in_commute_window
         while True:
+            _fetch_gate.wait()
             _wait_for_spotify_clear()
             if in_commute_window(cfg):
                 try:
@@ -191,6 +201,7 @@ def _start_fetch_threads(store: DataStore):
         from data import fetch_ics_events, fetch_work_state
         interval = cfg["calendar"]["update_interval_s"]
         while True:
+            _fetch_gate.wait()
             _wait_for_spotify_clear()
             ok = True
             try:
@@ -212,6 +223,7 @@ def _start_fetch_threads(store: DataStore):
     def _aqi_loop():
         from data import fetch_aqi
         while True:
+            _fetch_gate.wait()
             _wait_for_spotify_clear()
             try:
                 store.aqi.set(fetch_aqi(store))
@@ -223,6 +235,7 @@ def _start_fetch_threads(store: DataStore):
     def _alerts_loop():
         from data import fetch_alerts
         while True:
+            _fetch_gate.wait()
             _wait_for_spotify_clear()
             try:
                 store.alerts.set(fetch_alerts(store))
@@ -236,6 +249,7 @@ def _start_fetch_threads(store: DataStore):
         interval = cfg.get("spotify", {}).get("update_interval_s", 10)
         _last_track_key = None
         while True:
+            _fetch_gate.wait()
             try:
                 data = fetch_spotify(store)
                 store.spotify.set(data)
@@ -396,6 +410,7 @@ def main():
         _wake_s = cfg.get("sleep", {}).get("wake_minutes", 60) * 60
         _manually_awake = (time.time() - _sleep_woke_at) < _wake_s
         if _asleep and not _manually_awake:
+            _fetch_gate.clear()  # pause all background fetching while asleep
             _spotify_page_active = False
             # Bounce "zzz" around the screen (screensaver drift, ≈30s per step)
             _sleep_x_off += _sleep_dx
@@ -415,6 +430,7 @@ def main():
                 pass
             continue
 
+        _fetch_gate.set()  # resume fetching — awake or manually woken
         display = get_display(store)
         pages   = list(display.get("pages") or []) if display else None
         if not pages:

@@ -64,11 +64,12 @@
     "update_interval_s": 10
   },
   "sleep": {
-    "enabled":      false,
-    "start_h":      22,
-    "end_h":        7,
-    "days":         [0, 1, 2, 3, 4, 5, 6],
-    "wake_minutes": 60
+    "enabled":       false,
+    "start_h":       22,
+    "end_h":         7,
+    "days":          [0, 1, 2, 3, 4, 5, 6],
+    "all_day_days":  [],
+    "wake_minutes":  60
   },
   "display_cache_s": 60,
   "setup_port": 8080,
