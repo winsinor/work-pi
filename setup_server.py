@@ -682,6 +682,25 @@ class SetupHandler(BaseHTTPRequestHandler):
                 f.write(file_data)
             self._send_json({"status": "saved", "filename": file_name})
 
+        elif path == "/api/delete-image":
+            try:
+                filename = json.loads(body).get("filename", "")
+            except (json.JSONDecodeError, AttributeError):
+                self._send_json({"error": "Invalid JSON"}, 400)
+                return
+            if not filename or os.sep in filename or filename.startswith("."):
+                self._send_json({"error": "Invalid filename"}, 400)
+                return
+            target = os.path.join(_CUSTOM_IMAGES_DIR, filename)
+            if not os.path.normpath(target).startswith(os.path.normpath(_CUSTOM_IMAGES_DIR)):
+                self._send_json({"error": "Invalid filename"}, 400)
+                return
+            if not os.path.isfile(target):
+                self._send_json({"error": "File not found"}, 404)
+                return
+            os.remove(target)
+            self._send_json({"status": "deleted", "filename": filename})
+
         elif path == "/work/layout/save":
             try:
                 data = json.loads(body) if body else {}

@@ -1016,7 +1016,13 @@ async function loadCustomImages() {
         const row = document.createElement('div');
         row.className = 'custom-img-item';
         row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px';
-        row.innerHTML = `<span style="flex:1;font-size:13px">${escHtml(fname)}</span><button class="btn btn-sm" title="Delete (not yet implemented)" style="color:var(--red);border-color:var(--red)">Delete</button>`;
+        row.innerHTML = `<span style="flex:1;font-size:13px">${escHtml(fname)}</span><button class="btn btn-sm" data-fname="${escHtml(fname)}" style="color:var(--red);border-color:var(--red)">Delete</button>`;
+        row.querySelector('button').addEventListener('click', async () => {
+          if (!confirm(`Delete ${fname}?`)) return;
+          const r = await fetch('/api/delete-image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({filename: fname})});
+          if (r.ok) { row.remove(); if (!list.querySelectorAll('.custom-img-item').length) empty.style.display = ''; }
+          else { const d = await r.json(); toast('Delete failed: ' + (d.error || r.status)); }
+        });
         list.appendChild(row);
       });
     }

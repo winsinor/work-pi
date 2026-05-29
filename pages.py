@@ -30,7 +30,20 @@ def build_clock_page(tz: str | None = None) -> dict:
     }
 
 
+def _cfg_err(name: str, lines: list[dict]) -> dict:
+    """Return a minimal error page for a feature that isn't configured."""
+    return {"_name": name, "title": name.title(), "lines": lines}
+
+
 def build_weather_page(store: DataStore) -> dict:
+    loc = store.cfg.get("location") or {}
+    if not loc.get("lat") and not loc.get("lon"):
+        return _cfg_err("forecast", [
+            {"text": "Location not set", "size": 2, "color": "red"},
+            {"text": "Add your location", "size": 1, "color": "darkgrey"},
+            {"text": "in setup", "size": 1, "color": "darkgrey"},
+        ])
+
     weather = get_weather(store)
     aqi     = get_aqi(store)
     alert   = get_alerts(store)
@@ -116,7 +129,25 @@ def build_weather_page(store: DataStore) -> dict:
 
 
 def build_commute_page(store: DataStore) -> dict | None:
-    if not in_commute_window(store.cfg):
+    cfg = store.cfg
+    tomtom = (cfg.get("api_keys") or {}).get("tomtom", "").strip()
+    home   = (cfg.get("addresses") or {}).get("home", "").strip()
+    work   = (cfg.get("addresses") or {}).get("work", "").strip()
+    if not tomtom or not home or not work:
+        if not in_commute_window(cfg):
+            return None
+        missing = []
+        if not tomtom:
+            missing.append("TomTom key")
+        if not home or not work:
+            missing.append("addresses")
+        return _cfg_err("commute", [
+            {"text": "Commute not configured", "size": 1, "color": "red"},
+            {"text": ", ".join(missing) + " missing", "size": 1, "color": "darkgrey"},
+            {"text": "Open setup to fix", "size": 0, "color": "darkgrey"},
+        ])
+
+    if not in_commute_window(cfg):
         return None
     data  = get_commute(store)
     if not data:
@@ -147,6 +178,13 @@ def build_commute_page(store: DataStore) -> dict | None:
 
 
 def build_calendar_page(store: DataStore) -> dict | None:
+    ics_url = (store.cfg.get("calendar") or {}).get("ics_url", "").strip()
+    if not ics_url:
+        return _cfg_err("calendar_empty", [
+            {"text": "No calendar URL", "size": 2, "color": "red"},
+            {"text": "Add .ics URL in setup", "size": 1, "color": "darkgrey"},
+        ])
+
     events = get_ics_events(store)
     now    = local_now(store.cfg)
     today  = now.date()
