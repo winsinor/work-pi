@@ -811,7 +811,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     draw = ImageDraw.Draw(img)
 
     # ── Header ─────────────────────────────────────────────────────────────────────────
-    LOGO_H   = HEADER_H - 10   # 5px padding top and bottom
+    LOGO_H   = round((HEADER_H - 10) * 0.8)   # 20% smaller than header height
     logo_img = _load_spotify_logo(LOGO_H)
     if logo_img is not None:
         lw, lh  = logo_img.size
