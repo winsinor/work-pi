@@ -35,6 +35,14 @@ def _cfg_err(name: str, lines: list[dict]) -> dict:
     return {"_name": name, "title": name.title(), "lines": lines}
 
 
+def _fetch_err(name: str, error: str) -> dict:
+    """Return an error page for a transient fetch failure."""
+    return {"_name": name, "title": name.title(), "lines": [
+        {"text": "Fetch failed", "size": 2, "color": "red"},
+        {"text": error, "size": 1, "color": "darkgrey"},
+    ]}
+
+
 def build_weather_page(store: DataStore) -> dict:
     loc = store.cfg.get("location") or {}
     if not loc.get("lat") and not loc.get("lon"):
@@ -45,6 +53,9 @@ def build_weather_page(store: DataStore) -> dict:
         ])
 
     weather = get_weather(store)
+    if not weather and store.weather.last_error:
+        return _fetch_err("forecast", store.weather.last_error)
+
     aqi     = get_aqi(store)
     alert   = get_alerts(store)
     lines: list[dict] = []
@@ -149,8 +160,10 @@ def build_commute_page(store: DataStore) -> dict | None:
 
     if not in_commute_window(cfg):
         return None
-    data  = get_commute(store)
+    data = get_commute(store)
     if not data:
+        if store.commute.last_error:
+            return _fetch_err("commute", store.commute.last_error)
         return None
     lines: list[dict] = []
     for route in data.get("routes", []):
@@ -203,6 +216,9 @@ def build_calendar_page(store: DataStore) -> dict | None:
             pass
 
     if not upcoming:
+        if not events and store.ics_events.last_error:
+            return _fetch_err("calendar_empty", store.ics_events.last_error)
+
         lines: list[dict] = [
             {"text": "No upcoming", "size": 1, "color": "darkgrey"},
             {"text": "events today", "size": 1, "color": "darkgrey"},

@@ -55,11 +55,25 @@ WMO_DESC = {
 
 # ── Simple cache helper ───────────────────────────────────────────────────────────────
 
+def _short_error(exc: Exception) -> str:
+    """Condense a network/HTTP exception into a short display-friendly string."""
+    s = str(exc)
+    sl = s.lower()
+    if "timed out" in sl or "readtimeout" in sl or "timeout" in sl:
+        return "Timed out"
+    if "connectionerror" in sl or "newconnectionerror" in sl or "name or service not known" in sl or "failed to establish" in sl:
+        return "Network error"
+    if "httperror" in sl or "status_code" in sl:
+        return "Server error"
+    return s[:40]
+
+
 class _Cache:
     def __init__(self, ttl: float):
         self.ttl = ttl
         self.data = None
         self.fetched_at = 0.0
+        self.last_error: str | None = None
 
     def fresh(self) -> bool:
         return self.data is not None and time.time() - self.fetched_at < self.ttl
@@ -70,6 +84,10 @@ class _Cache:
     def set(self, data):
         self.data = data
         self.fetched_at = time.time()
+        self.last_error = None
+
+    def set_error(self, exc: Exception):
+        self.last_error = _short_error(exc)
 
     def get(self):
         return self.data
@@ -272,6 +290,7 @@ def get_commute(store: DataStore) -> dict:
             try:
                 store.commute.set(fetch_commute(store))
             except Exception as exc:
+                store.commute.set_error(exc)
                 print(f"[commute] fetch failed: {exc}")
     return store.commute.get() or {}
 
@@ -305,6 +324,7 @@ def get_weather(store: DataStore) -> dict:
         try:
             store.weather.set(fetch_weather(store))
         except Exception as exc:
+            store.weather.set_error(exc)
             print(f"[weather] fetch failed: {exc}")
     return store.weather.get() or {}
 
@@ -350,6 +370,7 @@ def get_aqi(store: DataStore) -> dict:
         try:
             store.aqi.set(fetch_aqi(store))
         except Exception as exc:
+            store.aqi.set_error(exc)
             print(f"[aqi] fetch failed: {exc}")
     return store.aqi.get() or {"aqi": None}
 
@@ -357,20 +378,18 @@ def get_aqi(store: DataStore) -> dict:
 # ── Weather alerts ────────────────────────────────────────────────────────────────────
 
 def fetch_alerts(store: DataStore) -> str | None:
+    """Fetch active NWS alerts. Raises on network errors."""
     cfg = store.cfg
     lat = cfg["location"]["lat"]
     lon = cfg["location"]["lon"]
-    try:
-        r = requests.get("https://api.weather.gov/alerts/active",
-                         params={"point": f"{lat},{lon}"}, timeout=5)
-        if r.status_code == 200:
-            features = r.json().get("features", [])
-            for f in features:
-                event = f.get("properties", {}).get("event")
-                if event:
-                    return f"! {event}"
-    except Exception:
-        pass
+    r = requests.get("https://api.weather.gov/alerts/active",
+                     params={"point": f"{lat},{lon}"}, timeout=5)
+    if r.status_code == 200:
+        features = r.json().get("features", [])
+        for f in features:
+            event = f.get("properties", {}).get("event")
+            if event:
+                return f"! {event}"
     return None
 
 
@@ -379,6 +398,7 @@ def get_alerts(store: DataStore) -> str | None:
         try:
             store.alerts.set(fetch_alerts(store))
         except Exception as exc:
+            store.alerts.set_error(exc)
             print(f"[alerts] fetch failed: {exc}")
     return store.alerts.get()
 
@@ -443,8 +463,9 @@ def get_ics_events(store: DataStore) -> list[dict]:
         try:
             store.ics_events.set(fetch_ics_events(store))
         except Exception as exc:
-            # Keep old cached data rather than blanking the display on a transient failure.
-            # The stale indicator will appear once age exceeds 2× TTL.
+            # Keep old cached data rather than overwriting with nothing.
+            # set_error() lets page builders show the error when there is no cached data.
+            store.ics_events.set_error(exc)
             print(f"[ics] fetch failed: {exc}")
     return store.ics_events.get() or []
 
@@ -557,8 +578,9 @@ def get_work_state(store: DataStore) -> tuple[str, object, str | None]:
             store.work_state._return_date = ret
             store.work_state._event_title = title
         except Exception as exc:
-            print(f"[work-state] ICS scan failed: {exc}")
+            store.work_state.set_error(exc)
             store.work_state.fetched_at = time.time()  # back off
+            print(f"[work-state] ICS scan failed: {exc}")
     return (
         store.work_state.get() or "NORMAL",
         getattr(store.work_state, "_return_date", None),
