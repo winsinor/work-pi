@@ -391,54 +391,51 @@ def _event_id(ev: dict) -> str:
 
 
 def fetch_ics_events(store: DataStore) -> list[dict]:
+    """Fetch and parse ICS events. Raises on network/HTTP/parse errors."""
     cfg = store.cfg
     ics_url = cfg["calendar"].get("ics_url", "").strip()
     if not ics_url or not _ICS_AVAILABLE:
         return []
-    try:
-        r = requests.get(ics_url, timeout=15)
-        r.raise_for_status()
-        cal    = icalendar.Calendar.from_ical(r.content)
-        now    = local_now(store.cfg)
-        start  = now - timedelta(minutes=30)
-        end    = now + timedelta(days=7)
-        raw    = recurring_ical_events.of(cal).between(start, end)
-        tz_name = cfg.get("location", {}).get("timezone")
-        local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
-        events: list[dict] = []
-        for component in raw:
-            if component.get("STATUS", "").upper() == "CANCELLED":
-                continue
-            dtstart = component.get("DTSTART")
-            dtend   = component.get("DTEND")
-            if dtstart is None:
-                continue
-            sv = dtstart.dt
-            ev = dtend.dt if dtend else sv
-            if not isinstance(sv, datetime):
-                continue
-            if hasattr(sv, "tzinfo") and sv.tzinfo is not None:
-                sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
-            if hasattr(ev, "tzinfo") and ev.tzinfo is not None:
-                ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
-            title    = str(component.get("SUMMARY", "")).strip()
-            location = str(component.get("LOCATION", "") or "").strip()
-            if not title:
-                continue
-            entry = {
-                "title":     title,
-                "start_iso": sv.isoformat(),
-                "end_iso":   ev.isoformat(),
-                "location":  location,
-                "_id":       _event_id({"title": title, "start_iso": sv.isoformat(),
-                                        "end_iso": ev.isoformat()}),
-            }
-            events.append(entry)
-        events.sort(key=lambda e: e["start_iso"])
-        return events
-    except Exception as exc:
-        print(f"[ics] fetch failed: {exc}")
-        return []
+    r = requests.get(ics_url, timeout=30)
+    r.raise_for_status()
+    cal    = icalendar.Calendar.from_ical(r.content)
+    now    = local_now(store.cfg)
+    start  = now - timedelta(minutes=30)
+    end    = now + timedelta(days=7)
+    raw    = recurring_ical_events.of(cal).between(start, end)
+    tz_name = cfg.get("location", {}).get("timezone")
+    local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
+    events: list[dict] = []
+    for component in raw:
+        if component.get("STATUS", "").upper() == "CANCELLED":
+            continue
+        dtstart = component.get("DTSTART")
+        dtend   = component.get("DTEND")
+        if dtstart is None:
+            continue
+        sv = dtstart.dt
+        ev = dtend.dt if dtend else sv
+        if not isinstance(sv, datetime):
+            continue
+        if hasattr(sv, "tzinfo") and sv.tzinfo is not None:
+            sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
+        if hasattr(ev, "tzinfo") and ev.tzinfo is not None:
+            ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
+        title    = str(component.get("SUMMARY", "")).strip()
+        location = str(component.get("LOCATION", "") or "").strip()
+        if not title:
+            continue
+        entry = {
+            "title":     title,
+            "start_iso": sv.isoformat(),
+            "end_iso":   ev.isoformat(),
+            "location":  location,
+            "_id":       _event_id({"title": title, "start_iso": sv.isoformat(),
+                                    "end_iso": ev.isoformat()}),
+        }
+        events.append(entry)
+    events.sort(key=lambda e: e["start_iso"])
+    return events
 
 
 def get_ics_events(store: DataStore) -> list[dict]:
@@ -446,7 +443,9 @@ def get_ics_events(store: DataStore) -> list[dict]:
         try:
             store.ics_events.set(fetch_ics_events(store))
         except Exception as exc:
-            print(f"[ics] error: {exc}")
+            # Keep old cached data rather than blanking the display on a transient failure.
+            # The stale indicator will appear once age exceeds 2× TTL.
+            print(f"[ics] fetch failed: {exc}")
     return store.ics_events.get() or []
 
 
