@@ -192,9 +192,12 @@ def build_calendar_page(store: DataStore) -> dict | None:
     upcoming = []
     for ev in events:
         try:
-            start = datetime.fromisoformat(ev["start_iso"])
-            mins  = int((start - now).total_seconds() / 60)
-            if mins > -30 and (mins <= 0 or start.date() == today):
+            start    = datetime.fromisoformat(ev["start_iso"])
+            end_dt   = datetime.fromisoformat(ev["end_iso"])
+            mins     = int((start - now).total_seconds() / 60)
+            end_mins = int((end_dt - now).total_seconds() / 60)
+            # Keep showing until 30 min after the meeting ENDS, not 30 min after it starts
+            if end_mins > -30 and (mins <= 0 or start.date() == today):
                 upcoming.append({**ev, "minutes_until": mins})
         except Exception:
             pass
