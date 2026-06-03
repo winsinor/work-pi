@@ -239,11 +239,16 @@ Page only appears in rotation while music is actively playing. Disappears within
 
 **Spotify page layout** (`render.py → render_spotify_page`):
 - `HEADER_H = 42` — header bar height
-- `BAR_ZONE = 34` — bottom zone for progress bar + time labels
-- Logo: loaded from `icons/spotify_logo.png` (official full Spotify logo PNG, aspect-ratio scaled to fit header). Falls back to drawn icon + "Spotify" text if file absent.
+- `BAR_ZONE = 34` — bottom zone for progress bar + time labels (14pt)
+- `LOGO_H = round((HEADER_H - 10) * 0.8)` — logo height (≈26px); right-aligned with 3px right margin
+- Logo: loaded from `icons/spotify_logo.png` (official full Spotify logo PNG, aspect-ratio scaled to fit). Falls back to drawn icon + "Spotify" text if file absent.
   - To install: `cp Spotify_Full_Logo_RGB_Green.png /home/pi/work-dashboard/icons/spotify_logo.png`
   - `_load_spotify_logo(target_h)` in render.py handles the cache
-- Artist font: 16pt, Album font: 15pt, time labels: 14pt
+- Album art: pinned to `CONTENT_Y + 2` (near top of content area, not centered)
+- Text layout: `GAP = 11` between track/artist/album; artist +5px down, album +2px down from computed positions
+- Track title: `_wrap_title()` tries 22pt→14pt (22pt = 20% larger base; shrinks to fit in 1 or 2 lines)
+- Artist and album: `_shrink_to_fit()` — both start at 16pt, shrink up to 25% (min 12pt) before truncating. Same parameters for both.
+- 2-line title: `block_h` includes both lines before `ty0` is computed; clamped to `CONTENT_Y+2` so nothing overlaps the header
 - Numpy fast path: `_render_spotify_fast()` caches static frame as uint16 H×W array; only re-renders the bottom `BAR_ZONE` rows on each tick for the progress bar
 
 ## Sleep mode
