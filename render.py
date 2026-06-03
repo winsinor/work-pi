@@ -869,7 +869,8 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
 
     track  = page.get("track",  "") or ""
     f_artist, artist = _shrink_to_fit(draw, page.get("artist", "") or "", 16, 0.25, TEXT_W, layout)
-    f_album,  album  = _shrink_to_fit(draw, page.get("album",  "") or "", 16, 0.25, TEXT_W, layout)
+    artist_pt = getattr(f_artist, "size", 16)
+    f_album,  album  = _shrink_to_fit(draw, page.get("album",  "") or "", artist_pt, 0, TEXT_W, layout)
 
     title_line1 = title_line2 = ""
     if track:
