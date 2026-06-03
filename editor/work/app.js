@@ -495,7 +495,7 @@ function buildGlobalProps() {
 const PAGE_LINE_LABELS = {
   clock:          ["Time",          "Day name",    "Date"],
   forecast:       ["Temperature",   "Description", "Hi / Lo", "Rain chance", "Humidity", "Wind", "Later today"],
-  calendar:       ["Meeting title", "Countdown",   "Time range", "Next event"],
+  calendar:       ["Meeting title", "Countdown",   "Time range", "Location", "Next event"],
   calendar_empty: ["No upcoming (line 1)", "No upcoming (line 2)",
                    "Next event title", "Next event time",
                    "Then event title", "Then event time"],
