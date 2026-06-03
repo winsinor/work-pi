@@ -422,7 +422,21 @@ def _truncate_to_fit(draw, text: str, font, max_w: int) -> str:
     return (text[:lo] + "..") if lo > 0 else ".."
 
 
-def _fit_text(draw, text: str, f, pos_h: int, max_w: int, layout: dict):
+def _shrink_to_fit(draw, text: str, base_pt: int, max_shrink: float,
+                   max_w: int, layout: dict) -> tuple:
+    """Return (font, text), shrinking up to max_shrink before truncating."""
+    if not text:
+        return _get_font(base_pt, layout), text
+    min_pt = max(8, round(base_pt * (1.0 - max_shrink)))
+    for pt in range(base_pt, min_pt - 1, -1):
+        f = _get_font(pt, layout)
+        if _text_size(draw, text, f)[0] <= max_w:
+            return f, text
+    f = _get_font(min_pt, layout)
+    return f, _truncate_to_fit(draw, text, f, max_w)
+
+
+
     tw = _text_size(draw, text, f)[0]
     if tw <= max_w:
         return f, text, tw
@@ -849,12 +863,9 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     GAP       = 11   # 1.5× the previous 7px gap between title/artist/album
     TITLE_GAP = 3    # gap between title line 1 and line 2
 
-    f_artist = _get_font(16, layout)
-    f_album  = _get_font(15, layout)
-
     track  = page.get("track",  "") or ""
-    artist = _truncate_to_fit(draw, page.get("artist", "") or "", f_artist, TEXT_W)
-    album  = _truncate_to_fit(draw, page.get("album",  "") or "", f_album,  TEXT_W)
+    f_artist, artist = _shrink_to_fit(draw, page.get("artist", "") or "", 16, 0.25, TEXT_W, layout)
+    f_album,  album  = _shrink_to_fit(draw, page.get("album",  "") or "", 15, 0.25, TEXT_W, layout)
 
     title_line1 = title_line2 = ""
     if track:
