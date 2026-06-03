@@ -255,8 +255,7 @@ def build_calendar_page(store: DataStore) -> dict | None:
         pass
 
     loc = nxt.get("location", "").strip()
-    if loc:
-        lines.append({"text": loc, "size": 0, "color": "grey"})
+    lines.append({"text": loc, "size": 0, "color": "grey"})
 
     if len(upcoming) > 1:
         t2 = upcoming[1].get("title", "")

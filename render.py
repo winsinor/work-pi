@@ -82,7 +82,8 @@ LAYOUT_DEFAULTS: dict = {
             {"x": None, "y": 48,  "h": 28},
             {"x": None, "y": 105, "h": 34},
             {"x": None, "y": 156, "h": 23},
-            {"x": 91,   "y": 201, "h": 13},
+            {"x": None, "y": 179, "h": 13},
+            {"x": None, "y": 201, "h": 13},
         ],
         "calendar_empty": [
             {"x": None, "y": 38,  "h": 28},

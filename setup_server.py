@@ -195,6 +195,7 @@ _DEMO_PAGES: dict = {
             {"text": "Design Review",          "color": "white", "wrap": True},
             {"text": "in 15 min",              "size": 3, "color": "red"},
             {"text": "2:00 - 3:00 PM",         "size": 1, "color": "grey"},
+            {"text": "Conference Room A",       "size": 0, "color": "grey"},
             {"text": "Then: 1:1 with Manager", "color": "grey"},
         ],
     },
