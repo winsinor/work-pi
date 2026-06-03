@@ -740,14 +740,14 @@ def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int
 
 
 def _wrap_title(draw, track: str, TEXT_W: int, layout: dict):
-    """Word-wrap track title to 2 lines, shrinking font up to 20% to avoid truncation.
+    """Word-wrap track title to 2 lines, up to 20% larger when it fits, shrinking to 14pt min.
 
-    Tries sizes from 18pt down to 14pt (≈80%). Stops as soon as both lines fit
-    without truncation. If no size avoids truncation, accepts it at 14pt.
+    Tries sizes from 22pt (120% of 18pt base) down to 14pt. Stops as soon as both
+    lines fit without truncation. If no size avoids truncation, accepts it at 14pt.
     Returns (font, line1, line2, line_height).
     """
-    BASE_PT = 18
-    MIN_PT  = round(BASE_PT * 0.80)  # 14
+    BASE_PT = 22   # 20% larger than the previous 18pt baseline
+    MIN_PT  = 14
     for pt in range(BASE_PT, MIN_PT - 1, -1):
         f        = _get_font(pt, layout)
         tw, th   = _text_size(draw, track, f)
@@ -815,7 +815,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     logo_img = _load_spotify_logo(LOGO_H)
     if logo_img is not None:
         lw, lh  = logo_img.size
-        logo_x  = W - 8 - lw
+        logo_x  = W - 3 - lw
         logo_y  = (HEADER_H - lh) // 2
         img.paste(logo_img, (logo_x, logo_y), logo_img)
     else:
@@ -887,9 +887,9 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     album_y = artist_y + ah + GAP
 
     if artist:
-        draw.text((TEXT_X, artist_y), artist, font=f_artist, fill=WHITE)
+        draw.text((TEXT_X, artist_y + 5), artist, font=f_artist, fill=WHITE)
     if album:
-        draw.text((TEXT_X, album_y),  album,  font=f_album,  fill=WHITE)
+        draw.text((TEXT_X, album_y  + 5), album,  font=f_album,  fill=WHITE)
 
     # ── Progress bar with elapsed / remaining ───────────────────────────────────
     BAR_Y       = H - BAR_ZONE + 6   # bar sits near top of the reserved zone
