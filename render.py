@@ -436,7 +436,7 @@ def _shrink_to_fit(draw, text: str, base_pt: int, max_shrink: float,
     return f, _truncate_to_fit(draw, text, f, max_w)
 
 
-
+def _fit_text(draw, text: str, f, pos_h: int, max_w: int, layout: dict):
     tw = _text_size(draw, text, f)[0]
     if tw <= max_w:
         return f, text, tw
