@@ -758,14 +758,14 @@ def _interpolate_progress(track: str, progress_ms: int, duration_ms: int) -> int
 
 
 def _wrap_title(draw, track: str, TEXT_W: int, layout: dict):
-    """Word-wrap track title to 2 lines, up to 20% larger when it fits, shrinking to 14pt min.
+    """Word-wrap track title to 2 lines, trying 24pt down to 16pt min.
 
-    Tries sizes from 22pt (120% of 18pt base) down to 14pt. Stops as soon as both
-    lines fit without truncation. If no size avoids truncation, accepts it at 14pt.
+    Stops as soon as both lines fit without truncation. If no size avoids truncation,
+    accepts it at 16pt.
     Returns (font, line1, line2, line_height).
     """
-    BASE_PT = 22   # 20% larger than the previous 18pt baseline
-    MIN_PT  = 14
+    BASE_PT = 24
+    MIN_PT  = 16
     for pt in range(BASE_PT, MIN_PT - 1, -1):
         f        = _get_font(pt, layout)
         tw, th   = _text_size(draw, track, f)
@@ -868,7 +868,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     TITLE_GAP = 3    # gap between title line 1 and line 2
 
     track  = page.get("track",  "") or ""
-    f_artist, artist = _shrink_to_fit(draw, page.get("artist", "") or "", 16, 0.25, TEXT_W, layout)
+    f_artist, artist = _shrink_to_fit(draw, page.get("artist", "") or "", 18, 0.25, TEXT_W, layout)
     artist_pt = getattr(f_artist, "size", 16)
     f_album,  album  = _shrink_to_fit(draw, page.get("album",  "") or "", artist_pt, 0, TEXT_W, layout)
 
