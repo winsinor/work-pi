@@ -702,6 +702,8 @@ def fetch_spotify(store: DataStore) -> dict | None:
     if context.get("type") == "playlist":
         uri = context.get("uri", "")
         playlist = _fetch_playlist_name(token, uri)
+    elif context.get("type") == "collection":
+        playlist = "Liked Songs"
 
     return {
         "track":       item.get("name", ""),
