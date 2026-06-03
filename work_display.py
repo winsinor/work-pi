@@ -258,7 +258,7 @@ def _start_fetch_threads(store: DataStore):
                 # between polls → the fast-path numpy cache stays warm.
                 track_key = (
                     (data or {}).get("track"),
-                    (data or {}).get("is_playing"),
+                    (data or {}).get("playlist"),
                 )
                 if track_key != _last_track_key:
                     _last_track_key = track_key

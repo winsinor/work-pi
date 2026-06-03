@@ -824,11 +824,10 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     CONTENT_Y = HEADER_H + 1
     CONTENT_H = H - CONTENT_Y - BAR_ZONE
 
-    # ── Album art (left, fetch early for bg color) ───────────────────────────────
-    ART_PAD  = 4
-    ART_SIZE = min(CONTENT_H - ART_PAD * 2, 150)
-    art_x    = ART_PAD + 5
-    art_y    = CONTENT_Y + 2   # pinned near top of content area
+    # ── Album art (left edge, fetch early for bg color) ──────────────────────────
+    ART_SIZE = min(CONTENT_H, 150)
+    art_x    = 0
+    art_y    = CONTENT_Y
     art_url  = page.get("art_url")
     art_img  = _fetch_album_art(art_url, ART_SIZE) if art_url else None
 
@@ -866,7 +865,7 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
         draw.text((12, (HEADER_H - pl_h) // 2), pl_text, font=f_pl, fill=MUTED)
 
     # ── Album art ───────────────────────────────────────────────────────────────────────
-    draw.rectangle([art_x - 1, art_y - 1, art_x + ART_SIZE, art_y + ART_SIZE],
+    draw.rectangle([art_x, art_y, art_x + ART_SIZE - 1, art_y + ART_SIZE - 1],
                    fill=(35, 35, 35), outline=DIM)
     if art_img:
         img.paste(art_img, (art_x, art_y))
@@ -967,9 +966,8 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         EDGE      = 8
         CONTENT_Y = HEADER_H + 1
         CONTENT_H = H - CONTENT_Y - BAR_ZONE
-        ART_PAD   = 4
-        ART_SIZE  = min(CONTENT_H - ART_PAD * 2, 150)
-        art_x     = ART_PAD + 5
+        ART_SIZE  = min(CONTENT_H, 150)
+        art_x     = 0
         TEXT_X    = art_x + ART_SIZE + 8
         TEXT_W    = W - TEXT_X - EDGE
 
