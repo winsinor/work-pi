@@ -1,11 +1,11 @@
 {
-  "canvas": {"width": 480, "height": 320},
+  "canvas": {"width": 320, "height": 240},
   "header": {"height": 0, "bg": [0, 0, 80], "title_color": "white"},
   "footer": {"height": 0},
   "content": {"left_margin": 6, "right_margin": 6, "line_gap_min": 2},
-  "icon":   {"radius": 107, "gap": 10, "x": 390, "y": 107},
-  "aqi":    {"cx": 231, "y": 16, "label_size": 21, "value_size": 35},
-  "grid":   {"height": 87, "columns": 5, "label_size": 18, "temp_size": 24, "rain_size": 18, "hum_size": 12, "wind_size": 12},
+  "icon":   {"radius": 76, "gap": 7, "x": 260, "y": 80},
+  "aqi":    {"cx": 154, "y": 12, "label_size": 15, "value_size": 25},
+  "grid":   {"height": 65, "columns": 5, "label_size": 13, "temp_size": 17, "rain_size": 13, "hum_size": 8, "wind_size": 8},
   "pages": {
     "clock":          {"enabled": true, "dwell_seconds": 8},
     "forecast":       {"enabled": true, "dwell_seconds": 10},
@@ -15,47 +15,47 @@
   },
   "line_positions": {
     "clock": [
-      {"x": null, "y": 147, "h": 94},
-      {"x": null, "y": 231, "h": 38},
-      {"x": null, "y": 73,  "h": 38}
+      {"x": null, "y": 110, "h": 66},
+      {"x": null, "y": 173, "h": 27},
+      {"x": null, "y": 55,  "h": 27}
     ],
     "forecast": [
-      {"x": 97,  "y": 36,  "h": 64},
-      {"x": 10,  "y": 127, "h": 32},
-      {"x": 10,  "y": 87,  "h": 27},
-      {"x": 10,  "y": 163, "h": 27},
-      {"x": 334, "y": 163, "h": 24},
-      {"x": 339, "y": 192, "h": 24},
-      {"x": 10,  "y": 199, "h": 27}
+      {"x": 65,  "y": 27,  "h": 45},
+      {"x": 7,   "y": 95,  "h": 23},
+      {"x": 7,   "y": 65,  "h": 19},
+      {"x": 7,   "y": 122, "h": 19},
+      {"x": 223, "y": 122, "h": 17},
+      {"x": 226, "y": 144, "h": 17},
+      {"x": 7,   "y": 149, "h": 19}
     ],
     "calendar": [
-      {"x": null, "y": 64,  "h": 40},
-      {"x": null, "y": 140, "h": 48},
-      {"x": null, "y": 208, "h": 32},
-      {"x": 136,  "y": 268, "h": 19}
+      {"x": null, "y": 48,  "h": 28},
+      {"x": null, "y": 105, "h": 34},
+      {"x": null, "y": 156, "h": 23},
+      {"x": 91,   "y": 201, "h": 13}
     ],
     "calendar_empty": [
-      {"x": null, "y": 50,  "h": 40},
-      {"x": null, "y": 90,  "h": 40},
-      {"x": null, "y": 155, "h": 30},
-      {"x": null, "y": 193, "h": 22},
-      {"x": null, "y": 242, "h": 30},
-      {"x": null, "y": 280, "h": 22}
+      {"x": null, "y": 38,  "h": 28},
+      {"x": null, "y": 68,  "h": 28},
+      {"x": null, "y": 116, "h": 21},
+      {"x": null, "y": 145, "h": 16},
+      {"x": null, "y": 182, "h": 21},
+      {"x": null, "y": 210, "h": 16}
     ],
     "commute": [
-      {"x": null, "y": null, "h": 32},
-      {"x": null, "y": null, "h": 43},
-      {"x": null, "y": null, "h": 21},
-      {"x": null, "y": null, "h": 32},
-      {"x": null, "y": null, "h": 43},
-      {"x": null, "y": null, "h": 21}
+      {"x": null, "y": null, "h": 23},
+      {"x": null, "y": null, "h": 30},
+      {"x": null, "y": null, "h": 15},
+      {"x": null, "y": null, "h": 23},
+      {"x": null, "y": null, "h": 30},
+      {"x": null, "y": null, "h": 15}
     ],
-    "wfh":      [{"x": 240, "y": null, "h": 40}],
-    "ooo":      [{"x": null, "y": 147, "h": 48}, {"x": null, "y": 196, "h": 19}],
-    "holiday":  [{"x": null, "y": null, "h": 37}],
-    "setup":    [{"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 24}, {"x": null, "y": null, "h": 32}, {"x": null, "y": null, "h": 18}],
-    "loading":  [{"x": null, "y": null, "h": 24}],
-    "error":    [{"x": null, "y": null, "h": 24}],
-    "shutdown": [{"x": null, "y": null, "h": 40}]
+    "wfh":      [{"x": 160, "y": null, "h": 28}],
+    "ooo":      [{"x": null, "y": 110, "h": 34}, {"x": null, "y": 147, "h": 13}],
+    "holiday":  [{"x": null, "y": null, "h": 26}],
+    "setup":    [{"x": null, "y": null, "h": 17}, {"x": null, "y": null, "h": 17}, {"x": null, "y": null, "h": 23}, {"x": null, "y": null, "h": 13}],
+    "loading":  [{"x": null, "y": null, "h": 17}],
+    "error":    [{"x": null, "y": null, "h": 17}],
+    "shutdown": [{"x": null, "y": null, "h": 28}]
   }
 }
