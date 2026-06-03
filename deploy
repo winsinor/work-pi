@@ -11,8 +11,14 @@ echo "==> Pulling latest …"
 git pull origin main
 
 echo "==> Syncing to $INSTALL_DIR …"
-sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' \
     "$REPO/" "$INSTALL_DIR/"
+
+# Seed layout on first deploy only — never overwrite user's saved layout
+if [ ! -f "$INSTALL_DIR/work_layout.json" ]; then
+    echo "==> Seeding work_layout.json from repo …"
+    sudo cp "$REPO/work_layout.json" "$INSTALL_DIR/work_layout.json"
+fi
 
 echo "==> Restarting $SERVICE …"
 sudo systemctl restart "$SERVICE"
