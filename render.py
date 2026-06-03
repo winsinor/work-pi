@@ -440,6 +440,15 @@ def _shrink_to_fit(draw, text: str, base_pt: int, max_shrink: float,
     return f, _truncate_to_fit(draw, text, f, max_w)
 
 
+import re as _re
+_ARTIST_SPLIT_RE = _re.compile(r',| feat\.?| ft\.?| \(feat', _re.IGNORECASE)
+
+def _primary_artist(artist: str) -> str:
+    """Return the text before the first comma or featuring marker."""
+    m = _ARTIST_SPLIT_RE.search(artist)
+    return artist[:m.start()].strip() if m else artist
+
+
 def _fit_text(draw, text: str, f, pos_h: int, max_w: int, layout: dict):
     tw = _text_size(draw, text, f)[0]
     if tw <= max_w:
@@ -868,8 +877,16 @@ def render_spotify_page(page: dict, layout: dict) -> "Image.Image":
     TITLE_GAP = 3    # gap between title line 1 and line 2
 
     track  = page.get("track",  "") or ""
-    f_artist, artist = _shrink_to_fit(draw, page.get("artist", "") or "", 18, 0.25, TEXT_W, layout)
-    artist_pt = getattr(f_artist, "size", 16)
+    _artist_raw = page.get("artist", "") or ""
+    f_artist, artist = _shrink_to_fit(draw, _artist_raw, 18, 0.25, TEXT_W, layout)
+    # If full text was truncated, try showing just the primary artist at a larger size
+    if artist != _artist_raw:
+        _primary = _primary_artist(_artist_raw)
+        if _primary and _primary != _artist_raw:
+            _f_p, _p_text = _shrink_to_fit(draw, _primary, 18, 0.25, TEXT_W, layout)
+            if _p_text == _primary:  # fits without truncation
+                f_artist, artist = _f_p, _p_text
+    artist_pt = getattr(f_artist, "size", 18)
     f_album,  album  = _shrink_to_fit(draw, page.get("album",  "") or "", artist_pt, 0, TEXT_W, layout)
 
     title_line1 = title_line2 = ""

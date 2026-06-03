@@ -40,7 +40,6 @@ const MARQUEE_PAGES          = ["spotify","calendar"];
 const state = {
   layout:    null,       // loaded from /work/layout
   dirty:     false,
-  demo:      true,       // true = demo data, false = live
   currentPage: "clock",  // page name or "global"
   previewIcon: null,     // icon override for forecast preview
   playing:   false,
@@ -216,7 +215,6 @@ async function init() {
   selectPage("clock");
   _initDpad();
   document.getElementById("btn-save").addEventListener("click", saveLayout);
-  document.getElementById("btn-demo").addEventListener("click", toggleDemo);
   document.getElementById("btn-play").addEventListener("click", togglePlay);
   document.getElementById("btn-export").addEventListener("click", exportLayout);
   document.getElementById("btn-reset").addEventListener("click", resetLayout);
@@ -241,6 +239,8 @@ async function saveLayout() {
   if (r.ok) {
     state.dirty = false;
     btn.textContent = "Saved ✓";
+    const dot = document.getElementById("unsaved-dot");
+    if (dot) dot.style.display = "none";
     loadPreview();
     setTimeout(() => {
       btn.textContent = "Save";
@@ -308,6 +308,8 @@ function markDirty() {
   if (!state.dirty) {
     state.dirty = true;
     document.getElementById("btn-save").disabled = false;
+    const dot = document.getElementById("unsaved-dot");
+    if (dot) dot.style.display = "";
   }
 }
 
@@ -391,9 +393,8 @@ function loadPreview() {
   if (page === "calendar" && state.calendarEmptyView) page = "calendar_empty";
   if (page === "forecast" && state.forecastPreview === "alert") page = "forecast_alert";
   else if (page === "forecast" && state.forecastPreview === "stale") page = "forecast_stale";
-  const demo  = state.demo ? 1 : 0;
   const icon  = state.previewIcon ? `&icon=${state.previewIcon}` : "";
-  const url   = `/work/preview/${page}?scale=2&demo=${demo}${icon}`;
+  const url   = `/work/preview/${page}?scale=2${icon}`;
 
   // POST the current in-memory layout — server renders from body, no file needed
   fetch(url, {
@@ -426,14 +427,6 @@ function loadPreview() {
     const idx = PAGE_NAMES.indexOf(state.currentPage);
     indicator.textContent = `Page ${idx + 1} / ${PAGE_NAMES.length}`;
   }
-}
-
-function toggleDemo() {
-  state.demo = !state.demo;
-  const btn = document.getElementById("btn-demo");
-  btn.classList.toggle("active", state.demo);
-  btn.textContent = state.demo ? "Demo ✓" : "Demo";
-  loadPreview();
 }
 
 // ── Auto-play ──────────────────────────────────────────────────────────────
@@ -697,8 +690,8 @@ function buildForecastExtra() {
     btn.className = "icon-btn" + (state.previewIcon === ic ? " selected" : "");
     btn.title = ic;
     const img = document.createElement("img");
-    img.src = `/icons/${WEATHER_ICON_SVG[ic]}`;
-    img.width = 32; img.height = 32;
+    img.src = `/work/icon/${ic}`;
+    img.width = 36; img.height = 36;
     img.style.display = "block";
     btn.appendChild(img);
     btn.onclick = () => {

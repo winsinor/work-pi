@@ -728,6 +728,28 @@ class SetupHandler(BaseHTTPRequestHandler):
                 pass
             self._send_json({"ok": True})
 
+        elif path.startswith("/work/icon/"):
+            icon_name = path[len("/work/icon/"):]
+            try:
+                from PIL import Image, ImageDraw
+                from render import _draw_weather_icon
+                SIZE = 48
+                img = Image.new("RGB", (SIZE, SIZE), (18, 18, 18))
+                draw = ImageDraw.Draw(img)
+                _draw_weather_icon(img, draw, icon_name, SIZE // 2, SIZE // 2, SIZE // 2 - 3)
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                png = buf.getvalue()
+            except Exception as exc:
+                self._send_json({"error": str(exc)}, 500)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(png)))
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            self.wfile.write(png)
+
         elif path.startswith("/work/preview/"):
             page_name = path[len("/work/preview/"):]
             qs = urllib.parse.parse_qs(
