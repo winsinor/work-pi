@@ -101,14 +101,20 @@
 
 #preview-overlay.hidden { display: none; }
 
-/* Page nav arrows overlay the preview edges (works at any preview size) */
+/* Preview + flanking nav arrows. Arrows are flex siblings (not overlays) so
+   they sit at the canvas edges and never cover the rendered preview. */
+#preview-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
 .page-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 5;
-  width: 34px;
-  height: 56px;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,8 +128,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 .page-arrow:hover { background: rgba(0, 0, 0, 0.7); }
-#btn-prev-page { left: 6px; }
-#btn-next-page { right: 6px; }
 
 #preview-controls {
   display: flex;
@@ -539,8 +543,14 @@
     background: #111;
     padding: 6px;
   }
+  #preview-row {
+    width: 100%; height: 100%;
+    justify-content: center;
+    gap: 6px;
+  }
   #preview-wrap {
     width: auto; height: 100%;
+    min-width: 0;
     max-width: 100%; max-height: 100%;
     aspect-ratio: 4 / 3;
   }
@@ -549,10 +559,8 @@
     position: absolute; bottom: 4px; left: 0; right: 0;
     justify-content: center; font-size: 11px; pointer-events: none;
   }
-  /* Preview is full-width on mobile, so overlay the arrows on its edges */
-  .page-arrow { width: 38px; height: 60px; font-size: 20px; }
-  #btn-prev-page { left: 4px; }
-  #btn-next-page { right: 4px; }
+  /* Arrows stay flex siblings flanking the preview — never overlapping it */
+  .page-arrow { width: 34px; height: 60px; font-size: 20px; }
 
   /* The bottom deck */
   #props-panel {

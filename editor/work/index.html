@@ -31,12 +31,14 @@
 
   <!-- Center: preview -->
   <div id="canvas-area">
-    <div id="preview-wrap">
-      <img id="preview-img" src="" alt="preview" width="640" height="480">
-      <div id="preview-overlay" class="hidden">
-        <span id="preview-status">Rendering<span id="preview-dots"></span></span>
-      </div>
+    <div id="preview-row">
       <button id="btn-prev-page" class="page-arrow" onclick="prevPage()" aria-label="Previous page">◀</button>
+      <div id="preview-wrap">
+        <img id="preview-img" src="" alt="preview" width="640" height="480">
+        <div id="preview-overlay" class="hidden">
+          <span id="preview-status">Rendering<span id="preview-dots"></span></span>
+        </div>
+      </div>
       <button id="btn-next-page" class="page-arrow" onclick="nextPage()" aria-label="Next page">▶</button>
     </div>
     <div id="preview-controls">
