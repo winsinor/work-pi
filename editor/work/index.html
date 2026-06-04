@@ -36,11 +36,11 @@
       <div id="preview-overlay" class="hidden">
         <span id="preview-status">Rendering<span id="preview-dots"></span></span>
       </div>
+      <button id="btn-prev-page" class="page-arrow" onclick="prevPage()" aria-label="Previous page">◀</button>
+      <button id="btn-next-page" class="page-arrow" onclick="nextPage()" aria-label="Next page">▶</button>
     </div>
     <div id="preview-controls">
-      <button class="btn btn-sm" onclick="prevPage()">◀</button>
       <span id="page-indicator">–</span>
-      <button class="btn btn-sm" onclick="nextPage()">▶</button>
     </div>
   </div>
 
@@ -54,16 +54,25 @@
         <div>X <span id="dpad-xval">—</span></div>
         <div>Y <span id="dpad-yval">—</span></div>
       </div>
-      <div class="dpad-grid">
-        <div></div>
-        <button class="dpad-btn" data-dir="up">▲</button>
-        <div></div>
-        <button class="dpad-btn" data-dir="left">◀</button>
-        <button id="dpad-step" class="dpad-center">1px</button>
-        <button class="dpad-btn" data-dir="right">▶</button>
-        <div></div>
-        <button class="dpad-btn" data-dir="down">▼</button>
-        <div></div>
+      <!-- Active element's H / X / Y / Show controls dock here on mobile -->
+      <div id="dpad-active"></div>
+      <div id="dpad-pads">
+        <div class="dpad-grid">
+          <div></div>
+          <button class="dpad-btn" data-dir="up">▲</button>
+          <div></div>
+          <button class="dpad-btn" data-dir="left">◀</button>
+          <button id="dpad-step" class="dpad-center">1px</button>
+          <button class="dpad-btn" data-dir="right">▶</button>
+          <div></div>
+          <button class="dpad-btn" data-dir="down">▼</button>
+          <div></div>
+        </div>
+        <div id="dpad-size" title="Font size of selected element">
+          <button class="dpad-btn" data-dir="size-up" aria-label="Increase font size">A▲</button>
+          <div class="dpad-size-label">size</div>
+          <button class="dpad-btn" data-dir="size-down" aria-label="Decrease font size">A▼</button>
+        </div>
       </div>
     </div>
 
@@ -71,6 +80,8 @@
   </div>
 
 </div>
+
+<div id="toast" class="toast"></div>
 
 <!-- Icon picker row for forecast page -->
 <template id="tmpl-icon-row">

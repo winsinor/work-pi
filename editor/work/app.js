@@ -129,23 +129,53 @@ function nudge(dir) {
   _updateDpadCoords();
 }
 
+// On mobile the active element's H/X/Y/Show inputs are relocated into the D-pad
+// dock so they stay put while the element list scrolls. Track the moved node so
+// it can be returned to its row before another is moved (or the list rebuilds).
+const _isMobile = () => window.matchMedia("(max-width: 600px)").matches;
+let _movedDetail = null, _movedHome = null;
+
+function _restoreMovedDetail() {
+  if (_movedDetail && _movedHome && _movedHome.isConnected) {
+    _movedHome.appendChild(_movedDetail);
+  }
+  _movedDetail = null;
+  _movedHome = null;
+}
+
+function _relocateDetail(row) {
+  _restoreMovedDetail();
+  if (!_isMobile()) return;
+  const detail = row.querySelector(".elem-detail");
+  const slot = document.getElementById("dpad-active");
+  if (!detail || !slot) return;
+  _movedDetail = detail;
+  _movedHome = row;
+  slot.appendChild(detail);
+}
+
 function activateElem(row) {
   document.querySelectorAll(".elem-row.active-elem")
     .forEach(r => r.classList.remove("active-elem"));
   row.classList.add("active-elem");
   const xInp    = row.querySelector(".elem-x");
   const yInp    = row.querySelector(".elem-y");
+  const hInp    = row.querySelector(".elem-h");
+  const visInp  = row.querySelector(".elem-vis");
   const label   = row.querySelector(".elem-header")?.textContent?.trim() || "";
   const pageName = row.dataset.pageName || null;
   const lineIdx  = row.dataset.lineIdx != null ? parseInt(row.dataset.lineIdx) : null;
-  _activeElem = { label, xInp, yInp, pageName, lineIdx };
+  _activeElem = { label, xInp, yInp, hInp, visInp, pageName, lineIdx };
   document.getElementById("dpad-label").textContent = label;
+  _relocateDetail(row);
   _updateDpadCoords();
-  // Gray out axes that this element doesn't support
+  // Gray out controls the element doesn't support
   document.querySelectorAll(".dpad-btn[data-dir=left], .dpad-btn[data-dir=right]")
     .forEach(b => b.disabled = !xInp);
   document.querySelectorAll(".dpad-btn[data-dir=up], .dpad-btn[data-dir=down]")
     .forEach(b => b.disabled = !yInp);
+  document.querySelectorAll(".dpad-btn[data-dir^=size]")
+    .forEach(b => b.disabled = !hInp);
 }
 
 function _updateDpadCoords() {
@@ -171,6 +201,17 @@ function _updateDpadCoords() {
   document.getElementById("dpad-yval").textContent = yDisplay;
 }
 
+// Adjust the font size (H) of the active element by the current step.
+function nudgeSize(delta) {
+  if (!_activeElem || !_activeElem.hInp) return;
+  const inp = _activeElem.hInp;
+  const min = parseInt(inp.min) || 6;
+  const max = parseInt(inp.max) || 80;
+  const cur = parseInt(inp.value) || 14;
+  inp.value = Math.max(min, Math.min(max, cur + delta));
+  inp.dispatchEvent(new Event("input"));
+}
+
 function _initDpad() {
   // Tapping an element row (header or detail) activates it
   document.getElementById("props-content").addEventListener("pointerdown", e => {
@@ -178,16 +219,37 @@ function _initDpad() {
     if (row) activateElem(row);
   });
 
-  // Prevent D-pad clicks from stealing focus on desktop
-  document.getElementById("dpad").addEventListener("mousedown", e => {
+  const dpad = document.getElementById("dpad");
+
+  // Prevent D-pad button clicks from stealing focus on desktop
+  dpad.addEventListener("mousedown", e => {
     if (!e.target.matches("input")) e.preventDefault();
   });
 
-  // Direction buttons + step cycle
-  document.getElementById("dpad").addEventListener("click", e => {
+  // Direction buttons (X/Y), size buttons (H), and step cycle
+  dpad.addEventListener("click", e => {
     const btn = e.target.closest("[data-dir]");
-    if (btn) nudge(btn.dataset.dir);
+    if (btn) {
+      const d = btn.dataset.dir;
+      if (d === "size-up")        nudgeSize(_nudgeStep());
+      else if (d === "size-down") nudgeSize(-_nudgeStep());
+      else                        nudge(d);
+    }
     if (e.target.id === "dpad-step") cycleStep();
+  });
+
+  // Keyboard-aware: when a docked input is focused, collapse the pad so the
+  // on-screen keyboard never covers the field being edited.
+  dpad.addEventListener("focusin", e => {
+    if (e.target.matches("input[type=number]")) {
+      document.body.classList.add("editing-field");
+      setTimeout(() => e.target.scrollIntoView({block: "center", behavior: "smooth"}), 50);
+    }
+  });
+  dpad.addEventListener("focusout", e => {
+    if (e.target.matches("input[type=number]")) {
+      document.body.classList.remove("editing-field");
+    }
   });
 
   // Start with arrows disabled
@@ -228,6 +290,7 @@ async function saveLayout() {
     btn.textContent = "Saved ✓";
     const dot = document.getElementById("unsaved-dot");
     if (dot) dot.style.display = "none";
+    toast("Layout saved ✓");
     loadPreview();
     setTimeout(() => {
       btn.textContent = "Save";
@@ -236,8 +299,18 @@ async function saveLayout() {
   } else {
     btn.textContent = "Save";
     btn.disabled = false;
-    alert("Save failed: " + r.status);
+    toast("Save failed: " + r.status, "error");
   }
+}
+
+let _toastTimer = null;
+function toast(msg, kind = "success") {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "toast toast-" + kind + " show";
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.className = "toast"; }, 2600);
 }
 
 async function resetLayout() {
@@ -447,6 +520,18 @@ function playStep() {
 // ── Properties panel ───────────────────────────────────────────────────────
 
 function renderProps() {
+  // Pull any relocated detail back before the list is rebuilt, then reset the
+  // dock to its idle state (nothing selected on the new page).
+  _restoreMovedDetail();
+  _activeElem = null;
+  document.body.classList.remove("editing-field");
+  const slot = document.getElementById("dpad-active");
+  if (slot) slot.innerHTML = "";
+  const dlabel = document.getElementById("dpad-label");
+  if (dlabel) dlabel.textContent = "tap an element to position it";
+  document.querySelectorAll(".dpad-btn").forEach(b => b.disabled = true);
+  _updateDpadCoords();
+
   const panel = document.getElementById("props-content");
   panel.innerHTML = "";
   if (state.currentPage === "global") {
