@@ -1,62 +1,290 @@
 {
-  "canvas": {"width": 320, "height": 240},
-  "header": {"height": 0, "bg": [0, 0, 80], "title_color": "white"},
-  "footer": {"height": 0},
-  "content": {"left_margin": 6, "right_margin": 6, "line_gap_min": 2},
-  "icon":   {"radius": 76, "gap": 7, "x": 260, "y": 80},
-  "aqi":    {"cx": 154, "y": 12, "label_size": 15, "value_size": 25},
-  "grid":   {"height": 65, "columns": 5, "label_size": 13, "temp_size": 17, "rain_size": 13, "hum_size": 8, "wind_size": 8},
+  "canvas": {
+    "width": 320,
+    "height": 240
+  },
+  "header": {
+    "height": 0,
+    "bg": [
+      0,
+      0,
+      80
+    ],
+    "title_color": "white"
+  },
+  "footer": {
+    "height": 0
+  },
+  "content": {
+    "left_margin": 6,
+    "right_margin": 6,
+    "line_gap_min": 2
+  },
+  "icon": {
+    "radius": 50,
+    "gap": 7,
+    "x": 270,
+    "y": 52
+  },
+  "aqi": {
+    "cx": 151,
+    "y": 8,
+    "label_size": 15,
+    "value_size": 25
+  },
+  "grid": {
+    "height": 62,
+    "columns": 5,
+    "label_size": 13,
+    "temp_size": 17,
+    "rain_size": 13,
+    "hum_size": 8,
+    "wind_size": 8
+  },
+  "font": {
+    "path": "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
+  },
   "pages": {
-    "clock":          {"enabled": true, "dwell_seconds": 8},
-    "forecast":       {"enabled": true, "dwell_seconds": 10},
-    "calendar":       {"enabled": true, "dwell_seconds": 12},
-    "calendar_empty": {"enabled": true, "dwell_seconds": 8},
-    "commute":        {"enabled": true, "dwell_seconds": 10}
+    "clock": {
+      "enabled": true
+    },
+    "forecast": {
+      "enabled": true
+    },
+    "calendar": {
+      "enabled": true
+    },
+    "calendar_empty": {
+      "enabled": true
+    },
+    "commute": {
+      "enabled": true
+    },
+    "wfh": {
+      "enabled": true
+    },
+    "ooo": {
+      "enabled": true
+    },
+    "holiday": {
+      "enabled": true
+    },
+    "setup": {
+      "enabled": true
+    },
+    "loading": {
+      "enabled": true
+    },
+    "custom_image": {
+      "enabled": true
+    }
   },
   "line_positions": {
     "clock": [
-      {"x": null, "y": 110, "h": 66},
-      {"x": null, "y": 173, "h": 27},
-      {"x": null, "y": 55,  "h": 27}
+      {
+        "x": null,
+        "y": 114,
+        "h": 71
+      },
+      {
+        "x": null,
+        "y": 170,
+        "h": 27
+      },
+      {
+        "x": null,
+        "y": 55,
+        "h": 27
+      }
     ],
     "forecast": [
-      {"x": 65,  "y": 27,  "h": 45},
-      {"x": 7,   "y": 95,  "h": 23},
-      {"x": 7,   "y": 65,  "h": 19},
-      {"x": 7,   "y": 122, "h": 19},
-      {"x": 223, "y": 122, "h": 17},
-      {"x": 226, "y": 144, "h": 17},
-      {"x": 7,   "y": 149, "h": 19}
+      {
+        "x": 60,
+        "y": 28,
+        "h": 45
+      },
+      {
+        "x": 7,
+        "y": 95,
+        "h": 23
+      },
+      {
+        "x": 7,
+        "y": 65,
+        "h": 19
+      },
+      {
+        "x": 7,
+        "y": 123,
+        "h": 19
+      },
+      {
+        "x": 235,
+        "y": 130,
+        "h": 17,
+        "visible": false
+      },
+      {
+        "x": 238,
+        "y": 152,
+        "h": 17,
+        "visible": false
+      },
+      {
+        "x": 7,
+        "y": 149,
+        "h": 19
+      }
     ],
     "calendar": [
-      {"x": null, "y": 48,  "h": 28},
-      {"x": null, "y": 105, "h": 34},
-      {"x": null, "y": 156, "h": 23},
-      {"x": null, "y": 179, "h": 13},
-      {"x": null, "y": 201, "h": 13}
+      {
+        "x": null,
+        "y": 48,
+        "h": 28
+      },
+      {
+        "x": null,
+        "y": 105,
+        "h": 34
+      },
+      {
+        "x": null,
+        "y": 156,
+        "h": 27
+      },
+      {
+        "x": null,
+        "y": 201,
+        "h": 17
+      }
     ],
     "calendar_empty": [
-      {"x": null, "y": 38,  "h": 28},
-      {"x": null, "y": 68,  "h": 28},
-      {"x": null, "y": 116, "h": 21},
-      {"x": null, "y": 145, "h": 16},
-      {"x": null, "y": 182, "h": 21},
-      {"x": null, "y": 210, "h": 16}
+      {
+        "x": null,
+        "y": 38,
+        "h": 28
+      },
+      {
+        "x": null,
+        "y": 68,
+        "h": 28
+      },
+      {
+        "x": null,
+        "y": 116,
+        "h": 21
+      },
+      {
+        "x": null,
+        "y": 145,
+        "h": 16
+      },
+      {
+        "x": null,
+        "y": 182,
+        "h": 21
+      },
+      {
+        "x": null,
+        "y": 210,
+        "h": 16
+      }
     ],
     "commute": [
-      {"x": null, "y": null, "h": 23},
-      {"x": null, "y": null, "h": 30},
-      {"x": null, "y": null, "h": 15},
-      {"x": null, "y": null, "h": 23},
-      {"x": null, "y": null, "h": 30},
-      {"x": null, "y": null, "h": 15}
+      {
+        "x": null,
+        "y": null,
+        "h": 23
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 30
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 15
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 23
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 30
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 15
+      }
     ],
-    "wfh":      [{"x": 160, "y": null, "h": 28}],
-    "ooo":      [{"x": null, "y": 110, "h": 34}, {"x": null, "y": 147, "h": 13}],
-    "holiday":  [{"x": null, "y": null, "h": 26}],
-    "setup":    [{"x": null, "y": null, "h": 17}, {"x": null, "y": null, "h": 17}, {"x": null, "y": null, "h": 23}, {"x": null, "y": null, "h": 13}],
-    "loading":  [{"x": null, "y": null, "h": 17}],
-    "error":    [{"x": null, "y": null, "h": 17}],
-    "shutdown": [{"x": null, "y": null, "h": 28}]
+    "wfh": [
+      {
+        "x": 160,
+        "y": null,
+        "h": 28
+      }
+    ],
+    "ooo": [
+      {
+        "x": null,
+        "y": 110,
+        "h": 34
+      },
+      {
+        "x": null,
+        "y": 147,
+        "h": 13
+      }
+    ],
+    "holiday": [
+      {
+        "x": null,
+        "y": null,
+        "h": 26
+      }
+    ],
+    "setup": [
+      {
+        "x": null,
+        "y": null,
+        "h": 17
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 23
+      },
+      {
+        "x": null,
+        "y": null,
+        "h": 13
+      }
+    ],
+    "loading": [
+      {
+        "x": null,
+        "y": null,
+        "h": 17
+      }
+    ],
+    "error": [
+      {
+        "x": null,
+        "y": null,
+        "h": 17
+      }
+    ],
+    "shutdown": [
+      {
+        "x": null,
+        "y": null,
+        "h": 28
+      }
+    ]
   }
 }
