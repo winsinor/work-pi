@@ -950,7 +950,7 @@ $('btn-save').addEventListener('click', async () => {
       _cfg = {..._cfg, ...partial};
       updateStatus(_cfg);
       if (data.complete) {
-        setTimeout(() => toast('All required fields set — display starting…'), 1200);
+        setTimeout(() => toast('Display is restarting to apply changes…'), 1200);
       }
     } else {
       toast(data.error || 'Save failed', 'error');

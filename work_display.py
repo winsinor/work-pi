@@ -388,6 +388,27 @@ def main():
     else:
         print("[touch] no touch device found — touch disabled")
 
+    # ── Live config apply ─────────────────────────────────────────────────────
+    # In normal (already-configured) mode nothing else waits on config_saved, so
+    # settings saved from the web UI would otherwise sit unused until a manual
+    # restart — most of config.json is captured once at startup (W/H/fb/rotation/
+    # font/GPIO pins, DataStore TTLs, fetch intervals). Watch the event and
+    # re-exec so every save is applied cleanly, the same way setup mode does.
+    def _config_restart_watcher():
+        setup_server.config_saved.wait()
+        print("[config] settings saved via web UI — restarting to apply")
+        try:
+            _lf = render_page_rgb565(
+                build_loading_page(),
+                load_layout(font_path, display_w=W, display_h=H),
+                rotate_180=(rot == 180))
+            _write_frame(_lf, fb)
+        except Exception as exc:
+            print(f"[config] pre-restart frame failed: {exc}")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    threading.Thread(target=_config_restart_watcher, daemon=True).start()
+
     # ── Initial loading screen ────────────────────────────────────────────────
     loading_frame = render_page_rgb565(build_loading_page(), layout, rotate_180=(rot == 180))
     _write_frame(loading_frame, fb)
