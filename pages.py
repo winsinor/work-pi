@@ -13,6 +13,7 @@ from data import (
     in_commute_window, later_today_desc, wind_cardinal,
     local_now,
 )
+from render import get_raw_layout
 
 
 # ── Individual page builders ─────────────────────────────────────────────────
@@ -380,11 +381,16 @@ def build_display(store: DataStore) -> dict:
         ]}], "display_mode": "HOLIDAY"}
 
     tz = store.cfg.get("location", {}).get("timezone")
-    pages = [build_clock_page(tz)]
+    layout_pages = get_raw_layout().get("pages", {})
+
+    pages = []
+    if layout_pages.get("clock", {}).get("enabled", True):
+        pages.append(build_clock_page(tz))
+
     for fn in (build_spotify_page, build_calendar_page, build_weather_page, build_commute_page):
         try:
             page = fn(store)
-            if page:
+            if page and layout_pages.get(page.get("_name", ""), {}).get("enabled", True):
                 pages.append(page)
         except Exception as exc:
             print(f"[pages] {fn.__name__} failed: {exc}")

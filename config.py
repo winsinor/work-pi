@@ -30,7 +30,7 @@ DEFAULTS: dict = {
         "width": 320,
         "height": 240,
         "framebuffer": "/dev/fb1",
-        "rotation": 0,          # degrees: 0, 90, 180, or 270
+        "rotation": 0,          # degrees: 0 or 180 (hardware only supports these)
         "page_dwell_s": 8,      # default seconds per page
     },
     "buttons": {
@@ -108,6 +108,9 @@ def load() -> dict:
             merged["display"]["rotation"] = int(env_rot)
         except ValueError:
             pass
+
+    # Clamp rotation: only 0 and 180 are supported by the framebuffer driver
+    merged["display"]["rotation"] = 180 if merged["display"].get("rotation") == 180 else 0
 
     return merged
 

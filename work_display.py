@@ -97,6 +97,9 @@ def _launch_prerender(page: dict, layout: dict, rotate_180: bool) -> None:
     pid = id(page)
     if pid in _prerender_started:
         return
+    if len(_prerender_started) > 64:
+        _prerender_started.clear()
+        _prerender_cache.clear()
     _prerender_started.add(pid)
     def _work():
         try:

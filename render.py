@@ -220,6 +220,15 @@ def _scale_layout(layout: dict, sx: float, sy: float, sf: float,
     return layout
 
 
+def get_raw_layout() -> dict:
+    """Return the raw (unscaled) merged layout, or defaults if not yet loaded.
+
+    Used for boolean flag checks (e.g. page enabled) that don't need scaling.
+    Does not disturb the scaled-layout cache.
+    """
+    return _layout_cache.get("raw") or LAYOUT_DEFAULTS
+
+
 def invalidate_layout_cache() -> None:
     _layout_cache["raw"]        = None
     _layout_cache["mtime"]      = 0.0
@@ -1433,16 +1442,7 @@ def render_sleep_frame(W: int, H: int, x_off: int = 0, y_off: int = 0,
     y = max(0, min((H - th) // 2 + y_off, H - th))
     draw.text((x, y), text, font=font, fill=(70, 70, 70))
     data = _img_to_rgb565(img)
-    if rotate_180 and _NUMPY:
-        data = _np.frombuffer(data, '<u2')[::-1].tobytes()
-    elif rotate_180:
-        n   = len(data) // 2
-        buf = bytearray(n * 2)
-        for i in range(n):
-            j = n - 1 - i
-            buf[i*2], buf[i*2+1] = data[j*2], data[j*2+1]
-        data = bytes(buf)
-    return data
+    return _rotate_rgb565(data) if rotate_180 else data
 
 
 def solid_frame(W: int, H: int, color_rgb: tuple[int, int, int]) -> bytes:

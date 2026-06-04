@@ -169,10 +169,10 @@ k2.when_pressed = lambda: toggle_stats_fn()  # short press = stats toggle
 
 ## Dwell time
 
-`page_dwell_s` from `config.json → cfg["display"]["page_dwell_s"]` is the **only** source of dwell time. There is no per-page dwell. `default_dwell` is read once in `main()` and used directly:
+`page_dwell_s` from `config.json → cfg["display"]["page_dwell_s"]` is the **default** dwell time. `default_dwell` is read once in `main()`. The layout editor can override dwell per-page via `work_layout.json → pages[name]["dwell_seconds"]`:
 
 ```python
-dwell = default_dwell  # always; do not look up from layout
+dwell = int(layout.get("pages", {}).get(_pname, {}).get("dwell_seconds") or default_dwell)
 ```
 
 ## Custom images
@@ -218,7 +218,7 @@ Page only appears in rotation while music is actively playing. Disappears within
 3. Enter Client ID + Client Secret in setup UI → Save
 4. Click Connect Spotify → authorize → tab closes automatically
 
-**Redirect URI gotcha**: always derived from `_get_local_ip()` + `setup_port` — NOT the HTTP `Host` header. Both the auth URL and the token exchange callback use the same source, so they always match. If the user sees "redirect_uri not matching", the URI in their Spotify app settings doesn't match what the Pi computed — re-copy from the Spotify tab.
+**Redirect URI gotcha**: hard-coded to `http://127.0.0.1:<setup_port>/spotify/callback` — NOT the Pi's LAN IP. This satisfies Spotify's loopback exemption (no HTTPS required for 127.0.0.1). Both the auth URL and the token exchange callback use the same literal, so they always match. If the user sees "redirect_uri not matching", the URI in their Spotify app settings doesn't match — re-copy from the Spotify tab.
 
 **Config keys** (`config.json`):
 ```json
