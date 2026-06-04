@@ -622,6 +622,14 @@ class SetupHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
             self._send_json({"status": "saved", "complete": complete, "tz_synced": tz_synced})
+            # Make sure the full response reaches the browser before anything
+            # waiting on config_saved (e.g. the live-apply restart watcher) can
+            # tear the process down mid-flush — otherwise the client sees the
+            # connection reset and reports a spurious "Save failed".
+            try:
+                self.wfile.flush()
+            except Exception:
+                pass
             if complete:
                 config_saved.set()
 

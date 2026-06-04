@@ -397,6 +397,11 @@ def main():
     def _config_restart_watcher():
         setup_server.config_saved.wait()
         print("[config] settings saved via web UI — restarting to apply")
+        # Give the HTTP response time to fully reach the browser before we
+        # replace the process. os.execv closes the listening socket instantly,
+        # so without this pause the save POST (and any in-flight request) gets
+        # reset and the UI shows a spurious "Save failed" / "load failed".
+        time.sleep(1.2)
         try:
             _lf = render_page_rgb565(
                 build_loading_page(),
