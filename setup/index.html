@@ -27,9 +27,15 @@
   h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
   .subtitle { color: var(--muted); margin-bottom: 28px; }
 
+  .group-tabs { display: flex; gap: 6px; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+  .group-tab { flex: 1; text-align: center; padding: 10px 8px; border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; user-select: none; transition: background .15s, color .15s; }
+  .group-tab:hover { color: var(--text); }
+  .group-tab.active { background: var(--accent); color: #fff; }
+
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; }
   .tabs::-webkit-scrollbar { display: none; }
-  .tab { padding: 8px 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 13px; transition: color .15s; flex-shrink: 0; }
+  .tab { display: none; padding: 8px 14px; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-size: 13px; transition: color .15s; flex-shrink: 0; }
+  .tab.in-group { display: block; }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -117,17 +123,25 @@
   <h1>Work Dashboard Setup</h1>
   <p class="subtitle">Configure your Pi display. All settings are saved to <code>config.json</code> on the Pi.</p>
 
+  <div class="group-tabs" id="group-tabs">
+    <div class="group-tab active" data-group="setup">Setup</div>
+    <div class="group-tab" data-group="settings">Settings</div>
+    <div class="group-tab" data-group="layout">Layout</div>
+  </div>
+
   <div class="tabs" id="tabs">
-    <div class="tab active" data-tab="wifi">WiFi</div>
-    <div class="tab" data-tab="location">Location</div>
-    <div class="tab" data-tab="addresses">Addresses</div>
-    <div class="tab" data-tab="keys">API Keys</div>
-    <div class="tab" data-tab="calendar">Calendar</div>
-    <div class="tab" data-tab="custom-images">Custom Images</div>
-    <div class="tab" data-tab="keywords">Keywords</div>
-    <div class="tab" data-tab="spotify">Spotify</div>
-    <div class="tab" data-tab="display">Display</div>
-    <div class="tab" data-tab="intervals">Intervals</div>
+    <div class="tab active in-group" data-tab="wifi"          data-group="setup">WiFi</div>
+    <div class="tab in-group"        data-tab="location"      data-group="setup">Location</div>
+    <div class="tab in-group"        data-tab="addresses"     data-group="setup">Addresses</div>
+    <div class="tab in-group"        data-tab="keys"          data-group="setup">API Keys</div>
+    <div class="tab in-group"        data-tab="calendar"      data-group="setup">Calendar</div>
+    <div class="tab in-group"        data-tab="spotify"       data-group="setup">Spotify</div>
+    <div class="tab in-group"        data-tab="hardware"      data-group="setup">Hardware</div>
+    <div class="tab"                 data-tab="display"       data-group="settings">Display</div>
+    <div class="tab"                 data-tab="intervals"     data-group="settings">Schedule</div>
+    <div class="tab"                 data-tab="keywords"      data-group="settings">Keywords</div>
+    <div class="tab"                 data-tab="custom-images" data-group="settings">Images</div>
+    <div class="tab"                 data-tab="layout"        data-group="layout">Layout</div>
   </div>
 
   <div id="panels-container">
@@ -366,13 +380,9 @@
     </div>
   </div>
 
-  <!-- ── Display ── -->
-  <div class="panel" id="panel-display">
-    <div class="section">
-      <div class="section-title">Layout Editor</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Visually adjust text positions, font sizes, and page layout.</p>
-      <a href="/editor/work" target="_blank" class="btn btn-primary" style="display:inline-flex;text-decoration:none">Open Layout Editor ↗</a>
-    </div>
+  <!-- ── Hardware (one-time) ── -->
+  <div class="panel" id="panel-hardware">
+    <p class="hint" style="margin-bottom:16px">One-time hardware and system settings. You normally set these once when you build the display. Changing them restarts the service.</p>
     <div class="section">
       <div class="section-title">Screen Resolution</div>
       <div class="row">
@@ -385,7 +395,7 @@
           <input type="number" id="disp-height" min="128" max="1200" step="1">
         </div>
       </div>
-      <p class="hint">Default 480×320. Restart after changing to regenerate layout.</p>
+      <p class="hint">Default 320×240. Restart after changing to regenerate layout.</p>
     </div>
     <div class="section">
       <div class="section-title">Framebuffer</div>
@@ -401,6 +411,61 @@
           <option value="180">180° (upside-down)</option>
         </select>
       </div>
+    </div>
+    <div class="section">
+      <div class="section-title">GPIO Buttons</div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
+          <input type="checkbox" id="btn-enabled" style="width:auto"> Enable GPIO buttons
+        </label>
+        <p class="hint">Uncheck if no physical buttons are wired.</p>
+      </div>
+      <div id="btn-config-fields">
+        <div class="row">
+          <div class="field">
+            <label>Stats button GPIO pin</label>
+            <input type="number" id="btn-shutdown-gpio" min="1" max="40">
+            <p class="hint">Press to toggle system stats overlay</p>
+          </div>
+          <div class="field">
+            <label>Advance button GPIO pin</label>
+            <input type="number" id="btn-advance-gpio" min="1" max="40">
+            <p class="hint">Press to skip to next page</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Pull-up resistor</label>
+            <select id="btn-pull-up">
+              <option value="true">Yes (most HATs)</option>
+              <option value="false">No (pull-down)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Font</div>
+      <div class="field">
+        <label>Font path</label>
+        <input type="text" id="font-path" placeholder="/usr/share/fonts/truetype/freefont/FreeSansBold.ttf">
+        <p class="hint">Must be a TrueType (.ttf) font on the Pi. Install with <code>sudo apt install fonts-freefont-ttf</code>.</p>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Setup Server</div>
+      <div class="field">
+        <label>Setup web UI port</label>
+        <input type="number" id="setup-port" min="1024" max="65535">
+        <p class="hint">Default 8080. Change if another service uses this port. Requires restart.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Display behaviour (tweaks) ── -->
+  <div class="panel" id="panel-display">
+    <div class="section">
+      <div class="section-title">Page Dwell</div>
       <div class="field">
         <label>Default page dwell (seconds)</label>
         <div style="display:flex; align-items:center; gap:8px">
@@ -461,45 +526,14 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ── Layout ── -->
+  <div class="panel" id="panel-layout">
     <div class="section">
-      <div class="section-title">GPIO Buttons</div>
-      <div class="field">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
-          <input type="checkbox" id="btn-enabled" style="width:auto"> Enable GPIO buttons
-        </label>
-        <p class="hint">Uncheck if no physical buttons are wired.</p>
-      </div>
-      <div id="btn-config-fields">
-        <div class="row">
-          <div class="field">
-            <label>Stats button GPIO pin</label>
-            <input type="number" id="btn-shutdown-gpio" min="1" max="40">
-            <p class="hint">Press to toggle system stats overlay</p>
-          </div>
-          <div class="field">
-            <label>Advance button GPIO pin</label>
-            <input type="number" id="btn-advance-gpio" min="1" max="40">
-            <p class="hint">Press to skip to next page</p>
-          </div>
-        </div>
-        <div class="row">
-          <div class="field">
-            <label>Pull-up resistor</label>
-            <select id="btn-pull-up">
-              <option value="true">Yes (most HATs)</option>
-              <option value="false">No (pull-down)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="section">
-      <div class="section-title">Font</div>
-      <div class="field">
-        <label>Font path</label>
-        <input type="text" id="font-path" placeholder="/usr/share/fonts/truetype/freefont/FreeSansBold.ttf">
-        <p class="hint">Must be a TrueType (.ttf) font on the Pi. Install with <code>sudo apt install fonts-freefont-ttf</code>.</p>
-      </div>
+      <div class="section-title">Layout Editor</div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:10px">Visually adjust text positions, font sizes, and per-page layout with a live preview.</p>
+      <a href="/editor/work" target="_blank" class="btn btn-primary" style="display:inline-flex;text-decoration:none">Open Layout Editor ↗</a>
     </div>
     <div class="section">
       <div class="section-title">Display Preview</div>
@@ -514,7 +548,7 @@
     </div>
   </div>
 
-  <!-- ── Intervals ── -->
+  <!-- ── Schedule (tweaks) ── -->
   <div class="panel" id="panel-intervals">
     <div class="section">
       <div class="section-title">Update Intervals</div>
@@ -561,14 +595,6 @@
         </label>
       </div>
     </div>
-    <div class="section">
-      <div class="section-title">Setup Server</div>
-      <div class="field">
-        <label>Setup web UI port</label>
-        <input type="number" id="setup-port" min="1024" max="65535">
-        <p class="hint">Default 8080. Change if another service uses this port. Requires restart.</p>
-      </div>
-    </div>
   </div>
 
   </div><!-- /panels-container -->
@@ -601,47 +627,80 @@ function toast(msg, type='success') {
   setTimeout(() => el.classList.remove('show'), 3000);
 }
 
-const TABS = ['wifi','location','addresses','keys','calendar','custom-images','keywords','spotify','display','intervals'];
-let _tabIdx = 0;
+// Tabs are grouped into one-time Setup, frequently-tweaked Settings, and Layout.
+const GROUPS = {
+  setup:    ['wifi','location','addresses','keys','calendar','spotify','hardware'],
+  settings: ['display','intervals','keywords','custom-images'],
+  layout:   ['layout'],
+};
+let _group  = 'setup';
+let _tabIdx = 0;            // index within the active group
+
+const activeTabs = () => GROUPS[_group];
+
+function rebuildDots() {
+  const dots = $('page-dots');
+  dots.innerHTML = '';
+  activeTabs().forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'page-dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dots.appendChild(d);
+  });
+}
+
+function selectGroup(g, animate = true) {
+  if (!GROUPS[g]) return;
+  _group = g;
+  document.querySelectorAll('.group-tab').forEach(t => t.classList.toggle('active', t.dataset.group === g));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('in-group', t.dataset.group === g));
+  rebuildDots();
+  goTo(0, animate);
+}
 
 function goTo(idx, animate = true) {
+  const tabs = activeTabs();
   const prev = _tabIdx;
-  _tabIdx = Math.max(0, Math.min(TABS.length - 1, idx));
-  const dir = _tabIdx >= prev ? 'right' : 'left';
+  _tabIdx = Math.max(0, Math.min(tabs.length - 1, idx));
+  const dir  = _tabIdx >= prev ? 'right' : 'left';
+  const name = tabs[_tabIdx];
 
   document.querySelectorAll('.panel').forEach(p => {
     p.classList.remove('active', 'slide-in-right', 'slide-in-left');
   });
-  const next = $('panel-' + TABS[_tabIdx]);
+  const next = $('panel-' + name);
   next.classList.add('active');
   if (animate && prev !== _tabIdx) {
     void next.offsetWidth;
     next.classList.add(dir === 'right' ? 'slide-in-right' : 'slide-in-left');
   }
 
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === _tabIdx));
-  document.querySelectorAll('.tab')[_tabIdx].scrollIntoView({block:'nearest', inline:'center'});
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  const chip = document.querySelector(`.tab[data-tab="${name}"]`);
+  if (chip) chip.scrollIntoView({block:'nearest', inline:'center'});
   document.querySelectorAll('.page-dot').forEach((d, i) => d.classList.toggle('active', i === _tabIdx));
   $('btn-prev').disabled = _tabIdx === 0;
-  $('btn-next').disabled = _tabIdx === TABS.length - 1;
+  $('btn-next').disabled = _tabIdx === tabs.length - 1;
 
-  if (TABS[_tabIdx] === 'custom-images') loadCustomImages();
+  if (name === 'custom-images') loadCustomImages();
+  if (name === 'spotify') { loadSpotifyStatus(); loadSpotifyRedirectUri(); }
 }
 
-// Init page dots
-TABS.forEach((_, i) => {
-  const d = document.createElement('div');
-  d.className = 'page-dot' + (i === 0 ? ' active' : '');
-  d.addEventListener('click', () => goTo(i));
-  $('page-dots').appendChild(d);
+document.querySelectorAll('.group-tab').forEach(g => {
+  g.addEventListener('click', () => selectGroup(g.dataset.group));
 });
 
-document.querySelectorAll('.tab').forEach((tab, i) => {
-  tab.addEventListener('click', () => goTo(i));
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const i = activeTabs().indexOf(tab.dataset.tab);
+    if (i >= 0) goTo(i);
+  });
 });
 
 $('btn-prev').addEventListener('click', () => goTo(_tabIdx - 1));
 $('btn-next').addEventListener('click', () => goTo(_tabIdx + 1));
+
+selectGroup('setup', false);
 
 // Touch swipe between panels
 (function() {
@@ -1313,14 +1372,6 @@ $('btn-spotify-disconnect').addEventListener('click', async () => {
   } catch(e) {
     toast('Error: ' + e.message, 'error');
   }
-});
-
-// Load Spotify status when its tab is first opened
-document.querySelectorAll('.tab[data-tab="spotify"]').forEach(tab => {
-  tab.addEventListener('click', () => {
-    loadSpotifyStatus();
-    loadSpotifyRedirectUri();
-  });
 });
 
 </script>
