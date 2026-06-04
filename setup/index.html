@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Work Dashboard — Setup</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,7 +20,10 @@
     --radius:  8px;
   }
 
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.5; -webkit-text-size-adjust: 100%; }
+
+  /* Kill the 300ms tap delay and double-tap zoom on interactive controls */
+  .group-tab, .tab, .btn, .nav-arrow, .page-dot, .network-item, .tag button, label[style*="cursor"] { touch-action: manipulation; }
 
   .app { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
 
@@ -98,7 +101,7 @@
   .toast-success { background: #1a3a1f; color: var(--green); border: 1px solid #2ea043; }
   .toast-error   { background: #3d0c0a; color: var(--red);   border: 1px solid var(--red); }
 
-  .bottom-nav { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 8px 0 12px; margin-top: 24px; }
+  .bottom-nav { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 8px 0 calc(12px + env(safe-area-inset-bottom)); margin-top: 24px; }
   .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .nav-row { display: flex; align-items: center; gap: 8px; }
   .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -115,6 +118,25 @@
   @media (max-width: 500px) {
     .row { flex-direction: column; gap: 0; }
     h1 { font-size: 18px; }
+    .app { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+
+    /* 16px inputs stop iOS Safari from auto-zooming the page on focus */
+    input[type=text], input[type=password], input[type=number], input[type=url], select, textarea { font-size: 16px; padding: 10px 12px; }
+    .tags-input { font-size: 16px; }
+
+    /* Roomier tap targets (aim for ~44px) */
+    .group-tab { padding: 12px 8px; }
+    .tab { padding: 11px 15px; font-size: 14px; }
+    .btn { min-height: 42px; padding: 10px 16px; }
+    .btn-sm { min-height: 34px; }
+    .nav-arrow { width: 44px; height: 44px; font-size: 22px; }
+    .network-item { padding: 14px 12px; }
+    .tag { padding: 4px 6px 4px 10px; }
+    .tag button { font-size: 18px; padding: 0 4px; }
+
+    /* Save gets its own full-width row so it isn't crammed next to the arrows */
+    .nav-row { flex-wrap: wrap; }
+    #btn-save { flex: 1 0 100%; justify-content: center; margin-top: 8px; }
   }
 </style>
 </head>
@@ -655,6 +677,11 @@ function selectGroup(g, animate = true) {
   document.querySelectorAll('.group-tab').forEach(t => t.classList.toggle('active', t.dataset.group === g));
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('in-group', t.dataset.group === g));
   rebuildDots();
+  // Single-tab groups (e.g. Layout) don't need the arrows/dots — hide the clutter.
+  const single = activeTabs().length <= 1;
+  $('btn-prev').style.display  = single ? 'none' : '';
+  $('btn-next').style.display  = single ? 'none' : '';
+  $('page-dots').style.display = single ? 'none' : '';
   goTo(0, animate);
 }
 
