@@ -37,11 +37,6 @@
   full-width colored banner (red/orange background strip) so active NWS alerts are
   more visually prominent.
 
-- **Color palette toggle**: add a `color_palette` config key (`"dark"` / `"light"`)
-  for a white-background, dark-text mode. Define palettes as a dict in `render.py`;
-  expose toggle in the setup UI and `config.json`. All color references in
-  `render_page_pil` would read from the active palette.
-
 ## Main loop
 
 - **`glob.glob` every iteration** (`work_display.py:317`): scans the `custom_images/`

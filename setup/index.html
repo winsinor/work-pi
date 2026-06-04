@@ -498,6 +498,15 @@
       </div>
     </div>
     <div class="section">
+      <div class="section-title">Background</div>
+      <div class="field">
+        <label style="display:flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0">
+          <input type="checkbox" id="disp-weather-bg" style="width:auto"> Weather-reactive background
+        </label>
+        <p class="hint">Tints the page background to match the sky — blue when clear, grey for rain, darker at night. Uncheck for a plain black background.</p>
+      </div>
+    </div>
+    <div class="section">
       <div class="section-title">Sleep Mode</div>
       <div class="field">
         <label style="display:flex; align-items:center; gap:8px; cursor:pointer">
@@ -902,6 +911,7 @@ function populateForm(cfg) {
   $('disp-rotation').value = String(cfg.display?.rotation ?? 0);
   $('disp-dwell').value    = cfg.display?.page_dwell_s || 8;
   $('disp-dwell-val').textContent = `${$('disp-dwell').value}s`;
+  $('disp-weather-bg').checked = cfg.display?.weather_bg !== false;
 
   const btnEnabled = cfg.buttons?.enabled !== false;
   $('btn-enabled').checked = btnEnabled;
@@ -989,6 +999,7 @@ function collectForm() {
       framebuffer:  $('disp-fb').value.trim(),
       rotation:     +$('disp-rotation').value,
       page_dwell_s: +$('disp-dwell').value,
+      weather_bg:   $('disp-weather-bg').checked,
     },
     buttons: {
       enabled:       $('btn-enabled').checked,

@@ -149,10 +149,15 @@ def _wifi_status() -> dict:
 
 # ── Demo pages for editor preview ──────────────────────────────────────────────────
 
+# Sample clear-day sky gradient so the editor preview reflects the live
+# weather-reactive background (see pages._sky_gradient).
+_DEMO_BG = [[18, 44, 92], [44, 92, 158]]
+
 _DEMO_PAGES: dict = {
     "forecast": {
         "_name": "forecast",
         "title": "Forecast",
+        "bg": _DEMO_BG,
         "lines": [
             {"text": "72°F",                  "size": 3, "color": "white"},
             {"text": "Partly Cloudy",          "size": 1, "color": "white",    "left_align": True},
@@ -175,6 +180,7 @@ _DEMO_PAGES: dict = {
     "forecast_alert": {
         "_name": "forecast",
         "title": "Forecast",
+        "bg": _DEMO_BG,
         "lines": [
             {"text": "72°F",                  "size": 3, "color": "white"},
             {"text": "Partly Cloudy",          "size": 1, "color": "white",    "left_align": True},
@@ -198,6 +204,7 @@ _DEMO_PAGES: dict = {
     "forecast_stale": {
         "_name": "forecast",
         "title": "Forecast",
+        "bg": _DEMO_BG,
         "lines": [
             {"text": "72°F",                  "size": 3, "color": "white"},
             {"text": "Partly Cloudy",          "size": 1, "color": "white",    "left_align": True},

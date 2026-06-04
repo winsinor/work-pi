@@ -342,6 +342,78 @@ def build_shutdown_page() -> dict:
     }
 
 
+# ── Weather-reactive background gradient ─────────────────────────────────────
+
+def _scale(c: tuple, f: float) -> tuple:
+    return tuple(max(0, min(255, int(v * f))) for v in c)
+
+
+def _blend(a: tuple, b: tuple, t: float) -> tuple:
+    return tuple(max(0, min(255, int(a[i] * (1 - t) + b[i] * t))) for i in range(3))
+
+
+def _sun_phase(daily: dict, now: datetime) -> str:
+    """'day' | 'night' | 'dawn' | 'dusk' from today's sunrise/sunset times."""
+    try:
+        sr = datetime.fromisoformat(daily["sunrise"][0])
+        ss = datetime.fromisoformat(daily["sunset"][0])
+    except Exception:
+        return "day" if 7 <= now.hour < 19 else "night"
+    tw = 50 * 60  # twilight half-window, seconds
+    if abs((now - sr).total_seconds()) <= tw:
+        return "dawn"
+    if abs((now - ss).total_seconds()) <= tw:
+        return "dusk"
+    return "day" if sr < now < ss else "night"
+
+
+def _sky_gradient(cur: dict, daily: dict, now: datetime) -> tuple:
+    """Vertical (top, bottom) RGB background reflecting sky condition + time.
+
+    Deliberately kept dark so the bright page text stays readable on a 320×240
+    TFT — it evokes the sky rather than reproducing a bright daytime blue.
+    """
+    code   = int(cur.get("weather_code") or 0)
+    precip = int(cur.get("precipitation_probability") or 0)
+    # Daytime base: saturated blue when clear → greyer as clouds/rain increase
+    if   code in (0, 1):       base = ((18, 44, 92), (44, 92, 158))  # clear
+    elif code == 2:            base = ((26, 46, 80), (52, 86, 134))  # partly cloudy
+    elif code in (3, 45, 48):  base = ((40, 46, 56), (70, 78, 90))   # overcast / fog
+    else:                      base = ((30, 38, 50), (54, 64, 78))   # precipitation
+    if precip >= 55 and code not in (0, 1):
+        base = ((30, 36, 46), (50, 58, 70))                          # likely rain → grey
+
+    phase = _sun_phase(daily, now)
+    if phase == "night":
+        return (_scale(base[0], 0.32), _scale(base[1], 0.38))
+    if phase == "dawn":
+        warm = (120, 78, 70)
+        return (_blend(_scale(base[0], 0.55), warm, 0.30),
+                _blend(_scale(base[1], 0.70), warm, 0.45))
+    if phase == "dusk":
+        warm = (140, 70, 44)
+        return (_blend(_scale(base[0], 0.55), warm, 0.32),
+                _blend(_scale(base[1], 0.70), warm, 0.50))
+    return base  # day
+
+
+def _display_bg(store: DataStore):
+    """Shared background gradient for every page this cycle, or None if disabled."""
+    cfg = store.cfg
+    if not cfg.get("display", {}).get("weather_bg", True):
+        return None
+    try:
+        weather = get_weather(store)
+        cur   = weather.get("current") or {}
+        daily = weather.get("daily") or {}
+        if not cur and not daily:
+            return None
+        return _sky_gradient(cur, daily, local_now(cfg))
+    except Exception as exc:
+        print(f"[pages] background gradient failed: {exc}")
+        return None
+
+
 # ── Top-level display assembler ──────────────────────────────────────────────
 
 def build_spotify_page(store: DataStore) -> dict | None:
@@ -364,24 +436,32 @@ def build_spotify_page(store: DataStore) -> dict | None:
 def build_display(store: DataStore) -> dict:
     state, return_date, event_title = get_work_state(store)
 
+    # One sky-driven gradient shared by every page this cycle (None = disabled).
+    bg = _display_bg(store)
+
+    def _result(pages, mode):
+        if bg:
+            for p in pages:
+                p.setdefault("bg", bg)
+        return {"pages": pages, "display_mode": mode}
+
     if state == "WFH":
-        return {"pages": [{"_name": "wfh", "title": "Working From Home", "lines": [
+        return _result([{"_name": "wfh", "title": "Working From Home", "lines": [
             {"text": "Working From Home", "size": 3, "color": "white"},
-        ]}], "display_mode": "WFH"}
+        ]}], "WFH")
 
     if state == "OOO":
         ret_str = return_date.strftime("%a %b %-d") if return_date else ""
         lines   = [{"text": "Out of Office", "size": 3, "color": "white"}]
         if ret_str:
             lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
-        return {"pages": [{"_name": "ooo", "title": "Out of Office", "lines": lines}],
-                "display_mode": "OOO"}
+        return _result([{"_name": "ooo", "title": "Out of Office", "lines": lines}], "OOO")
 
     if state == "HOLIDAY":
         title_text = event_title or "Holiday"
-        return {"pages": [{"_name": "holiday", "title": "Holiday", "lines": [
+        return _result([{"_name": "holiday", "title": "Holiday", "lines": [
             {"text": title_text, "size": 3, "color": "white"},
-        ]}], "display_mode": "HOLIDAY"}
+        ]}], "HOLIDAY")
 
     tz = store.cfg.get("location", {}).get("timezone")
     layout_pages = get_raw_layout().get("pages", {})
@@ -398,7 +478,7 @@ def build_display(store: DataStore) -> dict:
         except Exception as exc:
             print(f"[pages] {fn.__name__} failed: {exc}")
 
-    return {"pages": pages, "display_mode": "NORMAL"}
+    return _result(pages, "NORMAL")
 
 
 def get_display(store: DataStore) -> dict:

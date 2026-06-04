@@ -262,6 +262,26 @@ def _pil_color(name: str) -> tuple:
     return _PIL_COLORS.get(name, (255, 255, 255))
 
 
+def _fill_gradient(img: "Image.Image", top: tuple, bottom: tuple) -> None:
+    """Paint a vertical top→bottom gradient over the whole image, in place."""
+    W, H = img.size
+    if H <= 1:
+        return
+    if _NUMPY:
+        t = _np.array(top, _np.float32)
+        b = _np.array(bottom, _np.float32)
+        f = _np.linspace(0.0, 1.0, H, dtype=_np.float32).reshape(H, 1)
+        rows = t * (1.0 - f) + b * f                        # H×3
+        arr = _np.repeat(rows[:, None, :], W, axis=1)       # H×W×3
+        img.paste(Image.fromarray(arr.astype(_np.uint8), "RGB"))
+    else:
+        d = ImageDraw.Draw(img)
+        for y in range(H):
+            f = y / (H - 1)
+            d.line([(0, y), (W, y)],
+                   fill=tuple(int(top[i] * (1 - f) + bottom[i] * f) for i in range(3)))
+
+
 # ── Fonts ────────────────────────────────────────────────────────────────────────
 
 _pil_font_cache: dict = {}
@@ -1074,6 +1094,12 @@ def render_page_pil(page: dict, layout: dict | None = None,
     gap_min = layout["content"]["line_gap_min"]
 
     img  = Image.new("RGB", (W, H), (0, 0, 0))
+    _bg = page.get("bg")
+    if _bg:
+        try:
+            _fill_gradient(img, tuple(_bg[0]), tuple(_bg[1]))
+        except Exception as exc:
+            print(f"[render] gradient: {exc}")
     draw = ImageDraw.Draw(img)
 
     if hh > 0:

@@ -283,6 +283,16 @@ Active NWS alerts render as a full-width red banner strip (18px) just below the 
 
 When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` and render.py draws a 2px amber border around the entire frame. `_Cache.stale()` method handles the check. Clears automatically once data refreshes.
 
+## Weather-reactive background gradient
+
+Every page can carry a `page["bg"] = [top_rgb, bottom_rgb]` and `render.py` fills a vertical gradient instead of the flat black background (`_fill_gradient()` — numpy fast path, per-row PIL fallback). One gradient is computed per cycle in `pages.py:_display_bg()` and applied to **all** pages via `build_display` (the sky is the same across the rotation).
+
+- `pages.py:_sky_gradient(cur, daily, now)` derives the colors: blue when clear → grey for clouds/rain (from `weather_code` + `precipitation_probability`), darkened at night and warm-tinted at dawn/dusk via `_sun_phase()` (uses today's `daily.sunrise`/`sunset`, falls back to an hour heuristic).
+- Colors are deliberately **dark** so the existing bright text stays readable — it evokes the sky, not a literal bright daytime blue. The forecast hourly grid keeps its own black panel.
+- Toggle: `config.json → display.weather_bg` (default `true`); checkbox in Settings → Display. When off, no `bg` is set and pages render on black.
+- Spotify/custom-image pages have their own renderers and ignore `bg`.
+- Editor preview: forecast demo pages in `setup_server._DEMO_PAGES` carry a sample `bg` (`_DEMO_BG`, clear-day) so layout text contrast is previewable.
+
 ## Layout editor
 
 - Canvas is 320×240 — matches display, no coordinate translation needed

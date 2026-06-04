@@ -32,6 +32,7 @@ DEFAULTS: dict = {
         "framebuffer": "/dev/fb1",
         "rotation": 0,          # degrees: 0 or 180 (hardware only supports these)
         "page_dwell_s": 8,      # default seconds per page
+        "weather_bg": True,     # weather/time-reactive background gradient
     },
     "buttons": {
         "shutdown_gpio": 23,    # long-press to shut down
