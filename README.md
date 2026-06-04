@@ -398,7 +398,18 @@ From your phone or laptop on the same WiFi network, open:
 http://<pi-ip-address>:8080
 ```
 
-You'll see a setup form with eight tabs. Work through them:
+You'll see a setup form organised into three groups, selected with the segmented
+control at the top:
+
+- **Setup** — one-time configuration: WiFi, Location, Addresses, API Keys,
+  Calendar, Spotify, and Hardware (resolution, framebuffer, rotation, GPIO,
+  font).
+- **Settings** — things you tweak day-to-day: Display (page dwell + sleep
+  schedule), Schedule (data refresh intervals + commute window), Keywords, and
+  Images.
+- **Layout** — opens the visual [layout editor](#layout-customisation).
+
+Work through the **Setup** group first:
 
 ---
 
@@ -489,25 +500,37 @@ checks if the keyword appears *anywhere* in the title.
 
 ---
 
-### Display tab
+### Hardware tab (Setup group)
+
+Physical display and button wiring — set once when you build the unit.
 
 | Setting | Default | Notes |
 |---|---|---|
 | Width / Height | 320 / 240 | Match your display's actual resolution |
 | Framebuffer device | `/dev/fb1` | Run `ls /dev/fb*` on the Pi to check. HDMI = `/dev/fb0`. |
-| Rotation | 0° | Set to 180° if the image appears upside-down |
-| Page dwell | 8s | How long each page stays on screen before cycling |
+| Rotation | 0° | `0` or `180` only — set to 180° if the image appears upside-down |
 | GPIO buttons | Enabled | Uncheck if no buttons are wired to the Pi |
 | Stats GPIO | 23 | Short press: toggle stats overlay |
 | Advance GPIO | 24 | Press to skip to the next page |
 | Font path | `/usr/share/fonts/truetype/freefont/FreeSansBold.ttf` | Installed by `fonts-freefont-ttf` |
 
-> **If your display is upside-down**: set Rotation to 180° and save. The change
-> takes effect immediately without restarting.
+> **If your display is upside-down**: set Rotation to 180° and save. Saving a
+> complete config restarts the display automatically so the change takes effect.
 
 ---
 
-### Intervals tab
+### Display tab (Settings group)
+
+Day-to-day display behaviour.
+
+| Setting | Default | Notes |
+|---|---|---|
+| Page dwell | 8s | Default seconds each page stays on screen before cycling (per-page overrides live in the layout editor) |
+| Sleep schedule | Off | Optional hours/days to blank the screen — see the in-UI controls |
+
+---
+
+### Schedule tab (Settings group)
 
 How often each data source is polled. Adjust based on your needs and Pi's
 performance.
@@ -622,16 +645,17 @@ with a live preview.
 ### Auto-scaling
 
 `work_layout.json` stores pixel coordinates at the canvas size it was originally
-designed at (480×320). At runtime, `render.py` automatically scales everything
-to your actual display resolution (`display.width` × `display.height` from
-`config.json`). **You do not need to edit `work_layout.json` coordinates to match
-your display resolution** — just set the correct width/height in the setup UI and
-the layout scales automatically.
+designed at. At runtime, `render.py` automatically scales everything to your
+actual display resolution (`display.width` × `display.height` from `config.json`).
+**You do not need to edit `work_layout.json` coordinates to match your display
+resolution** — just set the correct width/height in the setup UI and the layout
+scales automatically. The committed layout uses a 320×240 canvas, but any canvas
+size works because it is scaled at runtime.
 
 ### Canvas size
 
 ```json
-"canvas": {"width": 480, "height": 320}
+"canvas": {"width": 320, "height": 240}
 ```
 
 This is the design canvas — the coordinate space the layout was drawn in.
@@ -646,9 +670,9 @@ Each page has named line slots. `x`/`y` are pixel coordinates (null = auto),
 ```json
 "line_positions": {
   "clock": [
-    {"x": null, "y": 147, "h": 94},   ← time "10:42 AM"
-    {"x": null, "y": 231, "h": 38},   ← day "Thursday"
-    {"x": null, "y": 73,  "h": 38}    ← date "May 15, 2026"
+    {"x": null, "y": 114, "h": 71},   ← time "10:42 AM"
+    {"x": null, "y": 170, "h": 27},   ← day "Thursday"
+    {"x": null, "y": 55,  "h": 27}    ← date "May 15, 2026"
   ]
 }
 ```
@@ -656,7 +680,7 @@ Each page has named line slots. `x`/`y` are pixel coordinates (null = auto),
 ### Icon placement
 
 ```json
-"icon": {"radius": 107, "gap": 10, "x": 390, "y": 107}
+"icon": {"radius": 50, "gap": 7, "x": 270, "y": 52}
 ```
 
 `radius` controls the icon size (diameter = radius×2). `x`/`y` is the icon
@@ -665,7 +689,7 @@ centre. Applies to the Forecast page weather icon.
 ### AQI overlay
 
 ```json
-"aqi": {"cx": 231, "y": 16, "label_size": 21, "value_size": 35}
+"aqi": {"cx": 151, "y": 8, "label_size": 15, "value_size": 25}
 ```
 
 `cx` is the horizontal centre of the AQI readout. `y` is the top edge.
@@ -673,7 +697,7 @@ centre. Applies to the Forecast page weather icon.
 ### Hourly grid
 
 ```json
-"grid": {"height": 87, "columns": 5, "label_size": 18, "temp_size": 24, "rain_size": 18}
+"grid": {"height": 62, "columns": 5, "label_size": 13, "temp_size": 17, "rain_size": 13}
 ```
 
 `height` is how many pixels the grid occupies at the bottom of the Forecast
@@ -681,11 +705,14 @@ page. `columns` controls how many time slots are shown (up to 5).
 
 ### Page dwell time
 
-Page dwell (how long each page is shown before cycling) is set in the **Display**
-tab of the setup UI as **Page dwell** (seconds), stored in `config.json` as
-`display.page_dwell_s`. All pages use the same dwell time.
+The **default** dwell (how long each page is shown before cycling) is set in the
+**Display** tab of the setup UI as **Page dwell** (seconds), stored in
+`config.json` as `display.page_dwell_s`.
 
-The `dwell_seconds` values in `work_layout.json` are not used by the display loop.
+Individual pages can override the default: set `dwell_seconds` for a page in
+`work_layout.json` (`pages.<name>.dwell_seconds`) and that page uses its own
+dwell instead of the global default. The layout editor exposes this as the
+per-page **Dwell** control.
 
 ---
 
@@ -718,7 +745,7 @@ See `config.example.json` for a fully annotated template.
 | `display.width` | `320` | Display width in pixels |
 | `display.height` | `240` | Display height in pixels |
 | `display.framebuffer` | `/dev/fb1` | Framebuffer device path |
-| `display.rotation` | `0` | Screen rotation: 0, 90, 180, or 270 |
+| `display.rotation` | `0` | Screen rotation: `0` or `180` only (the framebuffer driver supports no other values; anything else is clamped to `0`) |
 | `display.page_dwell_s` | `8` | Default seconds per page |
 | `buttons.enabled` | `true` | Set `false` if no GPIO buttons wired |
 | `buttons.shutdown_gpio` | `23` | GPIO BCM pin for shutdown button |
@@ -768,7 +795,7 @@ GPIO 23 ──[ button ]── GND
 
 ### Changing the pins
 
-Edit the **Display → GPIO buttons** section in the setup UI, or set
+Edit the **Setup → Hardware → GPIO buttons** section in the setup UI, or set
 `buttons.shutdown_gpio` and `buttons.advance_gpio` in `config.json`.
 
 ### No buttons
@@ -865,7 +892,7 @@ This gives the display read-only access to your calendar events.
 
 ### Image is upside down
 
-**After setup:** set **Rotation: 180°** in the Display tab of the setup UI.
+**After setup:** set **Rotation: 180°** in the Setup → Hardware tab of the setup UI.
 
 **During first-time setup** (the setup page itself is upside-down, so you can't
 read the URL): you need to tell the service about the rotation before a
@@ -1091,10 +1118,11 @@ pip3 list | grep -E "requests|icalendar|recurring|gpiozero|RPi"
 **Symptom**: The display shows only the top-left portion of the page, with
 content appearing twice side by side, or the image is compressed and garbled.
 
-**Cause**: `work_layout.json` has a canvas size (default 480×320) larger than
-the display's framebuffer (e.g. 320×240). The rendered frame is 307,200 bytes
-but the framebuffer only accepts 153,600 bytes. The kernel wraps the extra pixels,
-causing the doubled appearance.
+**Cause**: the rendered frame is larger than the display's framebuffer — e.g. a
+frame rendered at 480×320 (307,200 bytes) sent to a 320×240 framebuffer that only
+accepts 153,600 bytes. The kernel wraps the extra pixels, causing the doubled
+appearance. This happens when `display.width`/`display.height` in `config.json`
+don't match the actual panel resolution.
 
 **Fix**: The app now auto-scales the layout to match the display. Set your
 display's resolution correctly in the **Display** tab of the setup UI:

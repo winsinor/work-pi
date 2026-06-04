@@ -142,7 +142,8 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - **Always running**, even in normal display mode — allows reconfiguration without restart
 - Main config endpoint: `POST /api/config` — saves `config.json`, runs `timedatectl set-timezone`, signals `config_saved` event which triggers `os.execv` restart
 - Layout editor at `/editor/work` — saves to `work_layout.json`
-- **Screenshot of the live display** is on the **Display tab** — button hits `/api/screenshot`
+- **Screenshot of the live display** is on the **Layout tab** — button hits `/api/screenshot`
+- **Tab groups**: the UI is split into three groups via a segmented control — **Setup** (wifi, location, addresses, keys, calendar, spotify, hardware), **Settings** (display, intervals/Schedule, keywords, custom-images), and **Layout** (editor link + screenshot). See "Adding a new tab" below.
 - Location "Look up" button geocodes via Nominatim then auto-detects timezone via `timeapi.io` — populates lat, lon, and timezone dropdown automatically
 - **Spotify tab** — OAuth connect flow; see Spotify section below
 - **Custom images**: `POST /api/upload-image` (multipart) and `POST /api/delete-image` (JSON `{filename}`) — delete button wired in the UI; path-traversal protected
@@ -253,7 +254,7 @@ Page only appears in rotation while music is actively playing. Disappears within
 
 ## Sleep mode
 
-Configured via Setup → Display tab.
+Configured via Settings → Display tab.
 
 **Hourly window**: `sleep.start_h` / `sleep.end_h` apply on the days listed in `sleep.days` (0=Mon, 6=Sun).
 
@@ -293,7 +294,12 @@ When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` a
 
 **Demo pages** for preview (`setup_server.py → _DEMO_PAGES`): `forecast`, `forecast_alert`, `forecast_stale`, `calendar`, `calendar_empty`, `commute`, `wfh`, `ooo`, `holiday`. Add new page variants here when adding features.
 
-**Adding a new tab to setup UI**: add `data-tab="name"` to the tabs bar AND add `"name"` to the `TABS` JS array — forgetting the array causes all subsequent tabs to show wrong panels.
+**Adding a new tab to setup UI**: three edits, all required —
+1. add a `<div class="tab" data-tab="name" data-group="setup|settings|layout">` to the tabs bar,
+2. add a `<div class="panel" id="panel-name">` with the content, and
+3. add `"name"` to the matching group's array in the `GROUPS` map (`setup` / `settings` / `layout`).
+
+Forgetting the `GROUPS` entry means the tab never shows (group navigation only walks the array); a wrong `data-group` puts it in the wrong segment. `goTo()` indexes within the active group, so order in the array is the swipe/dot order.
 
 ## Known Pi environment gotchas
 

@@ -484,9 +484,10 @@ function buildGlobalProps() {
     // numRow("Min line gap", "content.line_gap_min", L.content.line_gap_min, 0, 40),
   ]));
 
-  frag.appendChild(section("Font", [
-    fontRow("Typeface", "font.path", L.font.path),
-  ]));
+  // Typeface is a system setting (it needs an on-disk .ttf with existence
+  // checking + fallbacks), so it lives in Setup → Hardware → Font, not here.
+  // A font picker in the editor had no effect: load_layout() always overrides
+  // layout.font.path with the config-resolved font.
 
   return frag;
 }
@@ -827,30 +828,6 @@ function colorNameRow(label, path, value) {
     wrap.appendChild(sw);
   }
   row.appendChild(wrap);
-  return row;
-}
-
-function fontRow(label, path, value) {
-  const row = document.createElement("div");
-  row.className = "prop-row";
-  const sel = document.createElement("select");
-  const fonts = [
-    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeMono.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeMonoBold.ttf",
-  ];
-  const labels = ["FreeSansBold","FreeSans","FreeMono","FreeMonoBold"];
-  fonts.forEach((f, i) => {
-    const opt = document.createElement("option");
-    opt.value = f; opt.textContent = labels[i];
-    if (f === value) opt.selected = true;
-    sel.appendChild(opt);
-  });
-  sel.style.width = "140px";
-  sel.addEventListener("change", () => onPropChange(path, sel.value));
-  row.innerHTML = `<span class="prop-label">${label}</span>`;
-  row.appendChild(sel);
   return row;
 }
 
