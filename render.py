@@ -1042,7 +1042,8 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
 
 # ── Main renderer ────────────────────────────────────────────────────────────────────
 
-def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
+def render_page_pil(page: dict, layout: dict | None = None,
+                    _out: dict | None = None) -> "Image.Image":
     global _current_scroll_zones
     _current_scroll_zones = []
 
@@ -1111,6 +1112,9 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
     page_name  = page.get("_name", "")
     positions  = layout.get("line_positions", {}).get(page_name, [])
     positions  = [(p if isinstance(p, dict) else {}) for p in positions]  # guard null entries
+    # When _out is provided (layout editor), record the center-Y actually used
+    # for each line so the editor can freeze auto positions without guessing.
+    line_centers = [None] * len(lines) if _out is not None else None
     icon_name  = page.get("weather_icon")
     icon_r    = layout["icon"]["radius"]
     icon_gap  = layout["icon"]["gap"]
@@ -1153,6 +1157,10 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
 
         pos_h    = max(6, int(pos.get("h") or 14))
         y_top    = (int(explicit_y) - pos_h // 2) if explicit_y is not None else auto_y
+        if line_centers is not None:
+            # Same value whether auto or explicit: storing this as an explicit
+            # `y` reproduces the identical y_top on the next render.
+            line_centers[i] = y_top + pos_h // 2
         right_bound = W - rm
         tw, _ = _text_size(draw, text, f)
 
@@ -1311,6 +1319,9 @@ def render_page_pil(page: dict, layout: dict | None = None) -> "Image.Image":
 
     if page.get("stale"):
         draw.rectangle([0, 0, W - 1, H - 1], outline=(140, 90, 0), width=2)
+
+    if _out is not None:
+        _out["line_centers"] = line_centers
 
     return img
 

@@ -5,26 +5,6 @@
 const WEATHER_ICONS = ["sun","cloud","partly_cloudy","rain","heavy_rain",
                        "thunderstorm","snow","fog"];
 
-const WEATHER_ICON_SVG = {
-  sun:           "clear-day.svg",
-  cloud:         "cloudy.svg",
-  partly_cloudy: "cloudy-2-day.svg",
-  rain:          "rainy-2.svg",
-  heavy_rain:    "rainy-3.svg",
-  thunderstorm:  "thunderstorms.svg",
-  snow:          "snowy-2.svg",
-  fog:           "fog.svg",
-};
-
-const ALL_COLORS = ["white","cyan","green","yellow","red","orange",
-                    "darkgrey","grey","magenta","blue","orange","brown","black"];
-
-const COLOR_HEX = {
-  white:"#ffffff", cyan:"#00c8dc", green:"#00d250", yellow:"#ffcc00",
-  red:"#dc3232",   orange:"#ff8c00", darkgrey:"#9b9b9b", grey:"#9b9b9b",
-  magenta:"#dc32dc", blue:"#2850dc", brown:"#a05000", black:"#000000",
-};
-
 const PAGE_NAMES = ["clock","forecast","calendar","commute","wfh","ooo","holiday","spotify"];
 const PAGE_LABELS = {
   clock:"Clock", forecast:"Forecast", calendar:"Calendar",
@@ -46,6 +26,7 @@ const state = {
   playTimer: null,
   calendarEmptyView: false,  // toggle empty-state preview on calendar page
   forecastPreview: "normal", // "normal" | "alert" | "stale"
+  lineCenters: {},           // page name -> exact center-Y per line (from render)
 };
 
 // ── D-pad ──────────────────────────────────────────────────────────────────
@@ -94,9 +75,15 @@ function _computeAllAutoYs(pageName) {
   return ys;
 }
 
+// Prefer the exact center-Y the renderer reported (via the preview response);
+// fall back to the local estimate until the first preview has loaded.
+function _autoCenters(pageName) {
+  return state.lineCenters[pageName] || _computeAllAutoYs(pageName);
+}
+
 // Lock all auto-Y lines to their computed positions so only one moves at a time
 function _lockAutoLines(pageName) {
-  const allYs  = _computeAllAutoYs(pageName);
+  const allYs  = _autoCenters(pageName);
   const L      = state.layout;
   const positions = (L.line_positions && L.line_positions[pageName]) || [];
   document.querySelectorAll(`#props-content .elem-row[data-page-name="${pageName}"]`)
@@ -132,8 +119,8 @@ function nudge(dir) {
   } else if (isX) {
     cur = 160; // center of 320px canvas
   } else {
-    // Compute exact auto-Y for this specific line
-    const ys = _computeAllAutoYs(_activeElem.pageName);
+    // Exact auto-Y for this specific line, as reported by the renderer
+    const ys = _autoCenters(_activeElem.pageName);
     cur = (ys[_activeElem.lineIdx] != null) ? ys[_activeElem.lineIdx] : 20;
   }
 
@@ -175,7 +162,7 @@ function _updateDpadCoords() {
   if (yv != null && yv !== "") {
     yDisplay = yv;
   } else if (_activeElem.pageName != null && _activeElem.lineIdx != null) {
-    const ys = _computeAllAutoYs(_activeElem.pageName);
+    const ys = _autoCenters(_activeElem.pageName);
     yDisplay = String(ys[_activeElem.lineIdx] ?? "—");
   } else {
     yDisplay = "—";
@@ -395,6 +382,9 @@ function loadPreview() {
   else if (page === "forecast" && state.forecastPreview === "stale") page = "forecast_stale";
   const icon  = state.previewIcon ? `&icon=${state.previewIcon}` : "";
   const url   = `/work/preview/${page}?scale=2${icon}`;
+  // The line_positions key the editor edits (forecast variants still use "forecast").
+  const posKey = (state.currentPage === "calendar" && state.calendarEmptyView)
+    ? "calendar_empty" : state.currentPage;
 
   // POST the current in-memory layout — server renders from body, no file needed
   fetch(url, {
@@ -404,6 +394,8 @@ function loadPreview() {
   })
   .then(r => {
     if (!r.ok) return r.text().then(t => { throw new Error(`${r.status}: ${t}`); });
+    const hdr = r.headers.get("X-Line-Centers");
+    if (hdr) { try { state.lineCenters[posKey] = JSON.parse(hdr); } catch (e) {} }
     return r.blob();
   })
   .then(blob => {
@@ -468,20 +460,9 @@ function buildGlobalProps() {
   const frag = document.createDocumentFragment();
   const L = state.layout;
 
-  // frag.appendChild(section("Header (0 = hidden)", [
-  //   numRow("Height", "header.height", L.header.height, 0, 60),
-  //   colorRow("Background", "header.bg", L.header.bg),
-  //   colorNameRow("Title color", "header.title_color", L.header.title_color),
-  // ]));
-
-  // frag.appendChild(section("Footer (0 = hidden)", [
-  //   numRow("Height", "footer.height", L.footer.height, 0, 60),
-  // ]));
-
   frag.appendChild(section("Content", [
     numRow("Left margin",  "content.left_margin",  L.content.left_margin,  0, 40),
     numRow("Right margin", "content.right_margin", L.content.right_margin, 0, 40),
-    // numRow("Min line gap", "content.line_gap_min", L.content.line_gap_min, 0, 40),
   ]));
 
   // Typeface is a system setting (it needs an on-disk .ttf with existence
@@ -775,59 +756,6 @@ function gridColsRow(label, path, value) {
   sel.addEventListener("change", () => onPropChange(path, Number(sel.value)));
   row.innerHTML = `<span class="prop-label">${label}</span>`;
   row.appendChild(sel);
-  return row;
-}
-
-function colorRow(label, path, value) {
-  // value is [r, g, b] array
-  const row = document.createElement("div");
-  row.className = "prop-row";
-  row.innerHTML = `<span class="prop-label">${label}</span>`;
-  const wrap = document.createElement("div");
-  wrap.style.display = "flex";
-  wrap.style.gap = "4px";
-  wrap.style.alignItems = "center";
-  // Simple RGB inputs
-  const rgbDiv = document.createElement("div");
-  rgbDiv.style.display = "flex"; rgbDiv.style.gap = "3px";
-  for (let i = 0; i < 3; i++) {
-    const inp = document.createElement("input");
-    inp.type = "number"; inp.min = 0; inp.max = 255; inp.value = value[i];
-    inp.className = "rgb-inp";
-    inp.addEventListener("change", () => {
-      const newVal = [
-        parseInt(rgbDiv.children[0].value),
-        parseInt(rgbDiv.children[1].value),
-        parseInt(rgbDiv.children[2].value),
-      ];
-      onPropChange(path, newVal);
-    });
-    rgbDiv.appendChild(inp);
-  }
-  wrap.appendChild(rgbDiv);
-  row.appendChild(wrap);
-  return row;
-}
-
-function colorNameRow(label, path, value) {
-  const row = document.createElement("div");
-  row.className = "prop-row";
-  row.innerHTML = `<span class="prop-label">${label}</span>`;
-  const wrap = document.createElement("div");
-  wrap.className = "swatch-row";
-  for (const c of Object.keys(COLOR_HEX)) {
-    const sw = document.createElement("div");
-    sw.className = "swatch" + (c === value ? " selected" : "");
-    sw.style.background = COLOR_HEX[c];
-    sw.title = c;
-    sw.onclick = () => {
-      wrap.querySelectorAll(".swatch").forEach(s => s.classList.remove("selected"));
-      sw.classList.add("selected");
-      onPropChange(path, c);
-    };
-    wrap.appendChild(sw);
-  }
-  row.appendChild(wrap);
   return row;
 }
 

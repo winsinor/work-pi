@@ -285,8 +285,8 @@ _DEMO_PAGES: dict = {
 
 
 def _render_preview(page_name: str, posted_layout: dict,
-                    icon: str | None, scale: int) -> bytes:
-    """Build a demo page dict, render with PIL, return PNG bytes."""
+                    icon: str | None, scale: int) -> tuple:
+    """Build a demo page dict, render with PIL, return (PNG bytes, line_centers)."""
     from render import render_page_pil, LAYOUT_DEFAULTS
     from PIL import Image
 
@@ -314,14 +314,15 @@ def _render_preview(page_name: str, posted_layout: dict,
     if icon:
         page["weather_icon"] = icon
 
-    img = render_page_pil(page, layout)
+    info: dict = {}
+    img = render_page_pil(page, layout, _out=info)
     if scale > 1:
         resample = getattr(Image, "Resampling", Image).NEAREST
         img = img.resize((img.width * scale, img.height * scale), resample)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    return buf.getvalue()
+    return buf.getvalue(), info.get("line_centers")
 
 
 # ── HTTP handler ────────────────────────────────────────────────────────────────────
@@ -384,6 +385,28 @@ class SetupHandler(BaseHTTPRequestHandler):
     def _read_body(self) -> bytes:
         length = int(self.headers.get("Content-Length", 0))
         return self.rfile.read(length) if length > 0 else b""
+
+    def _send_icon(self, icon_name: str):
+        """Render a weather-icon thumbnail PNG (used by the layout editor picker)."""
+        try:
+            from PIL import Image, ImageDraw
+            from render import _draw_weather_icon
+            SIZE = 48
+            img = Image.new("RGB", (SIZE, SIZE), (18, 18, 18))
+            draw = ImageDraw.Draw(img)
+            _draw_weather_icon(img, draw, icon_name, SIZE // 2, SIZE // 2, SIZE // 2 - 3)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            png = buf.getvalue()
+        except Exception as exc:
+            self._send_json({"error": str(exc)}, 500)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(png)))
+        self.send_header("Cache-Control", "max-age=3600")
+        self.end_headers()
+        self.wfile.write(png)
 
     def do_GET(self):
         path = self.path.split("?")[0]
@@ -466,6 +489,9 @@ class SetupHandler(BaseHTTPRequestHandler):
         elif path.startswith("/icons/"):
             rel = path[len("/icons/"):]
             self._send_file(os.path.join(_ICONS_DIR, rel), _ICONS_DIR)
+
+        elif path.startswith("/work/icon/"):
+            self._send_icon(path[len("/work/icon/"):])
 
         elif path == "/api/screenshot":
             try:
@@ -773,28 +799,6 @@ class SetupHandler(BaseHTTPRequestHandler):
                 pass
             self._send_json({"ok": True})
 
-        elif path.startswith("/work/icon/"):
-            icon_name = path[len("/work/icon/"):]
-            try:
-                from PIL import Image, ImageDraw
-                from render import _draw_weather_icon
-                SIZE = 48
-                img = Image.new("RGB", (SIZE, SIZE), (18, 18, 18))
-                draw = ImageDraw.Draw(img)
-                _draw_weather_icon(img, draw, icon_name, SIZE // 2, SIZE // 2, SIZE // 2 - 3)
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                png = buf.getvalue()
-            except Exception as exc:
-                self._send_json({"error": str(exc)}, 500)
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "image/png")
-            self.send_header("Content-Length", str(len(png)))
-            self.send_header("Cache-Control", "max-age=3600")
-            self.end_headers()
-            self.wfile.write(png)
-
         elif path.startswith("/work/preview/"):
             page_name = path[len("/work/preview/"):]
             qs = urllib.parse.parse_qs(
@@ -808,7 +812,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 posted_layout = {}
             try:
-                png = _render_preview(page_name, posted_layout, icon, scale)
+                png, line_centers = _render_preview(page_name, posted_layout, icon, scale)
             except Exception as exc:
                 print(f"[preview] {page_name}: {exc}")
                 self._send_json({"error": str(exc)}, 500)
@@ -817,6 +821,10 @@ class SetupHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "image/png")
             self.send_header("Content-Length", str(len(png)))
             self.send_header("Cache-Control", "no-cache")
+            # Exact center-Y the renderer used for each line, so the editor can
+            # freeze auto positions without re-deriving the layout math.
+            if line_centers is not None:
+                self.send_header("X-Line-Centers", json.dumps(line_centers))
             self.end_headers()
             self.wfile.write(png)
 

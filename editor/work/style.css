@@ -1,5 +1,9 @@
 /* Work Display Editor — extends editor/style.css */
 
+/* Remove the 300ms tap delay / double-tap zoom on interactive controls */
+.page-tab, .btn, .dpad-btn, .dpad-center, .icon-btn, .elem-header,
+.elem-row, #preview-controls .btn { touch-action: manipulation; }
+
 #body {
   display: flex;
   flex: 1;
@@ -188,24 +192,6 @@
   cursor: pointer;
 }
 
-/* ── Color swatches ─────────────────────────────────────── */
-.swatch-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.swatch {
-  width: 18px; height: 18px;
-  border-radius: 3px;
-  cursor: pointer;
-  border: 2px solid transparent;
-  flex-shrink: 0;
-}
-
-.swatch.selected { border-color: #fff; }
-
 /* ── Sub-section (per-line) ─────────────────────────────── */
 .sub-section {
   background: var(--surface2);
@@ -266,12 +252,6 @@
 .btn-primary:disabled { opacity: 0.4; cursor: default; }
 .btn-danger { background: var(--danger); color: #fff; border: none; }
 .btn-danger:hover { filter: brightness(1.2); }
-
-#btn-demo.active {
-  background: var(--warn);
-  color: #fff;
-  border-color: var(--warn);
-}
 
 /* ── D-pad nudge widget ──────────────────────────────────── */
 #dpad {
@@ -417,17 +397,6 @@
 .dpad-center:hover { background: var(--accent2); color: #fff; }
 .dpad-center:active { background: var(--accent); color: #fff; }
 
-/* ── RGB input (overrideable by media query) ─────────────── */
-.rgb-inp {
-  width: 48px;
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 4px;
-  padding: 3px 6px;
-  font-size: 12px;
-}
-
 #preview-dots {
   display: inline-block;
   width: 1.2em;
@@ -445,7 +414,7 @@
             padding-top: env(safe-area-inset-top, 0px); }
   #header h1 { font-size: 13px; }
   #btn-export, #btn-reset, #btn-play { display: none; }
-  #btn-demo, #btn-save {
+  #btn-save {
     padding: 8px 12px;
     font-size: 13px;
     min-height: 38px;
@@ -512,8 +481,7 @@
 
   /* Bigger touch targets for all inputs */
   .prop-row input[type=number],
-  .prop-row select,
-  .rgb-inp {
+  .prop-row select {
     width: 88px;
     padding: 9px 10px;
     font-size: 16px; /* prevents iOS zoom-on-focus */
@@ -529,12 +497,9 @@
   .prop-label { font-size: 14px; white-space: normal; }
   .prop-section-title { font-size: 11px; }
 
-  /* Larger swatches */
-  .swatch { width: 28px; height: 28px; border-radius: 5px; }
-
   /* Larger icon buttons */
   .icon-btn { width: 52px; height: 52px; border-radius: 8px; }
-  .icon-btn canvas { width: 40px !important; height: 40px !important; }
+  .icon-btn img { width: 44px !important; height: 44px !important; }
 
   /* D-pad: bigger touch targets */
   .dpad-grid {
