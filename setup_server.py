@@ -28,6 +28,36 @@ _LAYOUT_FILE = os.path.join(_BASE, "work_layout.json")
 # Event signalled when user saves a valid config via the web UI
 config_saved = threading.Event()
 
+# Secret fields are masked in GET /api/config responses (the server binds to the
+# LAN with no auth). When the client posts the sentinel back, it means the user
+# didn't change the field, so the previously-saved value is preserved.
+_SECRET_SENTINEL = "__SAVED__"
+_SECRET_PATHS = (
+    ("wifi", "password"),
+    ("api_keys", "tomtom"),
+    ("spotify", "client_secret"),
+    ("spotify", "refresh_token"),
+)
+
+
+def _mask_secrets(cfg: dict) -> dict:
+    """Return a deep copy of cfg with non-empty secret fields replaced by a sentinel."""
+    out = copy.deepcopy(cfg)
+    for section, key in _SECRET_PATHS:
+        sec = out.get(section)
+        if isinstance(sec, dict) and str(sec.get(key, "") or "").strip():
+            sec[key] = _SECRET_SENTINEL
+    return out
+
+
+def _strip_secret_sentinels(incoming: dict) -> None:
+    """Drop secret fields from POSTed config when they equal the sentinel, so the
+    merge keeps the previously-saved value instead of overwriting it with the mask."""
+    for section, key in _SECRET_PATHS:
+        sec = incoming.get(section)
+        if isinstance(sec, dict) and sec.get(key) == _SECRET_SENTINEL:
+            sec.pop(key, None)
+
 
 def _get_local_ip() -> str:
     try:
@@ -330,9 +360,14 @@ class SetupHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_error(404, "Setup UI not found")
 
-    def _send_file(self, abs_path: str):
-        if not os.path.normpath(abs_path).startswith(os.path.normpath(_BASE)):
+    def _send_file(self, abs_path: str, root: str = _BASE):
+        # Confine the resolved path to `root` so `..` traversal can't escape the
+        # served directory (e.g. /editor/../config.json reaching secrets).
+        real      = os.path.realpath(abs_path)
+        root_real = os.path.realpath(root)
+        if real != root_real and not real.startswith(root_real + os.sep):
             self.send_response(403); self.end_headers(); return
+        abs_path = real
         if not os.path.isfile(abs_path):
             self.send_error(404); return
         mime, _ = mimetypes.guess_type(abs_path)
@@ -357,7 +392,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             self._send_html(_SETUP_HTML)
 
         elif path == "/api/config":
-            self._send_json(cfg_module.load())
+            self._send_json(_mask_secrets(cfg_module.load()))
 
         elif path == "/api/wifi/scan":
             self._send_json({"networks": _wifi_scan()})
@@ -418,19 +453,19 @@ class SetupHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(exc)}, 502)
 
         elif path in ("/editor", "/editor/", "/editor/work", "/editor/work/"):
-            self._send_file(os.path.join(_EDITOR_DIR, "work", "index.html"))
+            self._send_file(os.path.join(_EDITOR_DIR, "work", "index.html"), _EDITOR_DIR)
 
         elif path.startswith("/work/editor/"):
             rel = path[len("/work/editor/"):]
-            self._send_file(os.path.join(_EDITOR_DIR, "work", rel))
+            self._send_file(os.path.join(_EDITOR_DIR, "work", rel), _EDITOR_DIR)
 
         elif path.startswith("/editor/"):
             rel = path[len("/editor/"):]
-            self._send_file(os.path.join(_EDITOR_DIR, rel))
+            self._send_file(os.path.join(_EDITOR_DIR, rel), _EDITOR_DIR)
 
         elif path.startswith("/icons/"):
             rel = path[len("/icons/"):]
-            self._send_file(os.path.join(_ICONS_DIR, rel))
+            self._send_file(os.path.join(_ICONS_DIR, rel), _ICONS_DIR)
 
         elif path == "/api/screenshot":
             try:
@@ -565,6 +600,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Invalid JSON"}, 400)
                 return
 
+            _strip_secret_sentinels(incoming)
             current = cfg_module.load()
             for k, v in incoming.items():
                 if isinstance(v, dict) and k in current and isinstance(current[k], dict):

@@ -753,6 +753,29 @@ $('btn-enabled').addEventListener('change', () => {
 
 let _cfg = {};
 
+// Secret fields come back from /api/config masked with this sentinel. Show the
+// field blank with a "saved" hint; an empty saved field sends the sentinel back
+// so the server keeps the stored value instead of wiping it.
+const SECRET_SENTINEL = '__SAVED__';
+
+function setSecretField(id, val) {
+  const el = $(id);
+  if (val === SECRET_SENTINEL) {
+    el.value = '';
+    el.placeholder = 'Saved — leave blank to keep current';
+    el.dataset.saved = '1';
+  } else {
+    el.value = val || '';
+    el.dataset.saved = '';
+  }
+}
+
+function secretValue(id) {
+  const el = $(id);
+  const v = el.value.trim();
+  return (!v && el.dataset.saved === '1') ? SECRET_SENTINEL : v;
+}
+
 async function loadConfig() {
   try {
     const r = await fetch('/api/config');
@@ -782,7 +805,7 @@ function populateForm(cfg) {
   $('route-label-0').value = rl[0] || 'Work → Home';
   $('route-label-1').value = rl[1] || 'Work → Waypoint → Home';
 
-  $('key-tomtom').value = cfg.api_keys?.tomtom || '';
+  setSecretField('key-tomtom', cfg.api_keys?.tomtom);
   $('cal-ics').value = cfg.calendar?.ics_url || '';
 
   tagWfh.set(cfg.wfh_keywords || []);
@@ -836,7 +859,7 @@ function populateForm(cfg) {
   $('setup-port').value = cfg.setup_port || 8080;
 
   $('spotify-client-id').value     = cfg.spotify?.client_id     || '';
-  $('spotify-client-secret').value = cfg.spotify?.client_secret || '';
+  setSecretField('spotify-client-secret', cfg.spotify?.client_secret);
 }
 
 function updateStatus(cfg) {
@@ -868,7 +891,7 @@ function collectForm() {
       $('route-label-0').value.trim() || 'Work → Home',
       $('route-label-1').value.trim() || 'Work → Waypoint → Home',
     ],
-    api_keys:  { tomtom: $('key-tomtom').value.trim() },
+    api_keys:  { tomtom: secretValue('key-tomtom') },
     calendar:  {
       ics_url:          $('cal-ics').value.trim(),
       update_interval_s: +$('int-calendar').value,
@@ -1202,7 +1225,7 @@ async function loadSpotifyRedirectUri() {
 
 $('btn-spotify-save').addEventListener('click', async () => {
   const clientId     = $('spotify-client-id').value.trim();
-  const clientSecret = $('spotify-client-secret').value.trim();
+  const clientSecret = secretValue('spotify-client-secret');
   try {
     const r = await fetch('/api/config', {
       method: 'POST',

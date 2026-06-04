@@ -136,13 +136,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 info "==> Installing to $INSTALL_DIR …"
 mkdir -p "$INSTALL_DIR"
 
-rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+# Exclude work_layout.json so re-running the installer never reverts a layout
+# the user customised via the editor; it's seeded separately below if absent.
+rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' \
     "$SCRIPT_DIR/" "$INSTALL_DIR/" \
     2>/dev/null || {
+    # rsync unavailable — copy manually but preserve the user's saved layout
+    _saved_layout=""
+    if [[ -f "$INSTALL_DIR/work_layout.json" ]]; then
+        _saved_layout="$(mktemp)"; cp "$INSTALL_DIR/work_layout.json" "$_saved_layout"
+    fi
     cp -r "$SCRIPT_DIR"/. "$INSTALL_DIR/"
     rm -rf "$INSTALL_DIR/.git" "$INSTALL_DIR/__pycache__"
     [[ -f "$SCRIPT_DIR/config.json" ]] || rm -f "$INSTALL_DIR/config.json"
+    [[ -n "$_saved_layout" ]] && mv "$_saved_layout" "$INSTALL_DIR/work_layout.json"
 }
+
+# Seed the layout only when missing — preserves the user's saved layout on reinstall.
+[[ -f "$INSTALL_DIR/work_layout.json" ]] || cp "$SCRIPT_DIR/work_layout.json" "$INSTALL_DIR/work_layout.json"
 
 chmod +x "$INSTALL_DIR/work_display.py" 2>/dev/null || true
 

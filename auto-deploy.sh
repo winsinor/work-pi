@@ -23,7 +23,13 @@ echo "[auto-deploy] $(date '+%Y-%m-%d %H:%M:%S') — new commits, deploying…"
 git log --oneline "$LOCAL..$REMOTE"
 
 git pull origin main
-sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' \
+# Exclude work_layout.json: it's edited live via the layout editor in the install
+# dir and must not be reverted to the repo copy on every upstream commit.
+sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' \
     "$REPO/" "$INSTALL_DIR/"
+# Seed the layout only on first deploy — never overwrite the user's saved layout.
+if [ ! -f "$INSTALL_DIR/work_layout.json" ]; then
+    sudo cp "$REPO/work_layout.json" "$INSTALL_DIR/work_layout.json"
+fi
 sudo systemctl restart "$SERVICE"
 echo "[auto-deploy] done"

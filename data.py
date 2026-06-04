@@ -453,7 +453,8 @@ def get_ics_events(store: DataStore) -> list[dict]:
 # ── Work state (WFH / OOO / HOLIDAY / NORMAL) ───────────────────────────────────────
 
 def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
-                        holiday_kw: list[str] | None = None) -> object:
+                        holiday_kw: list[str] | None = None,
+                        local_tz=None) -> object:
     ooo_kw     = ooo_kw     or []
     holiday_kw = holiday_kw or ["holiday"]
     for _ in range(14):
@@ -472,7 +473,7 @@ def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
             if isinstance(dtstart.dt, datetime):
                 sv = dtstart.dt
                 if hasattr(sv, "tzinfo") and sv.tzinfo:
-                    sv = sv.astimezone().replace(tzinfo=None)
+                    sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
                 if sv.hour != 0 or sv.minute != 0:
                     continue
             title = str(comp.get("SUMMARY", "")).lower()
@@ -539,7 +540,7 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
             if isinstance(ev, datetime):
                 ev = ev.date()
             new_state  = "OOO"
-            new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw)
+            new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw, local_tz)
             break
         if any(k in tl for k in holiday_kw):
             new_state = "HOLIDAY"
