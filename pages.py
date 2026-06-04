@@ -178,6 +178,12 @@ def build_commute_page(store: DataStore) -> dict | None:
     page = {"_name": "commute", "title": "Commute Home", "lines": lines}
     if store.commute.stale():
         page["stale"] = True
+    if _bg_enabled(cfg):
+        # Green when clear → amber → red as the worst route's traffic delay
+        # climbs (heavy ≈ 10 min added).
+        worst = max((r.get("traffic_delay_seconds", 0) for r in data.get("routes", [])),
+                    default=0)
+        page["bg"] = _ramp((_GO_GRAD, _WARM_GRAD, _HOT_GRAD), worst / 600)
     return page
 
 
@@ -270,6 +276,9 @@ def build_calendar_page(store: DataStore) -> dict | None:
     page = {"_name": "calendar", "title": "Calendar", "lines": lines}
     if store.ics_events.stale():
         page["stale"] = True
+    if _bg_enabled(store.cfg):
+        # Calm ≥90 min out, warming to amber then red as the next event nears.
+        page["bg"] = _ramp((_CALM_GRAD, _WARM_GRAD, _HOT_GRAD), (90 - mins) / 90)
     return page
 
 
@@ -397,10 +406,39 @@ def _sky_gradient(cur: dict, daily: dict, now: datetime) -> tuple:
     return base  # day
 
 
+# Reactive gradients for calendar urgency + commute traffic. Kept dark so the
+# bright page text stays readable (same principle as the sky gradient).
+# Kept dark on purpose: the urgency text itself is coloured (yellow/red), and
+# those are mid-luminance, so the background must stay dark to keep them legible.
+# Hue carries the signal — teal/green (calm) → amber → maroon (urgent).
+_CALM_GRAD = ((16, 32, 40), (26, 50, 60))    # cool teal — relaxed (calendar)
+_GO_GRAD   = ((14, 36, 24), (24, 54, 38))    # green — clear roads (commute)
+_WARM_GRAD = ((44, 34, 14), (64, 50, 18))    # amber — heads up
+_HOT_GRAD  = ((46, 18, 14), (66, 26, 20))    # maroon — urgent
+
+
+def _ramp(stops: tuple, t: float) -> tuple:
+    """Blend a 3-stop (calm, mid, hot) gradient by t in [0, 1].
+
+    Each stop is a (top_rgb, bottom_rgb) pair; top and bottom blend
+    independently so the result is itself a (top, bottom) gradient.
+    """
+    t = max(0.0, min(1.0, t))
+    if t <= 0.5:
+        f, a, b = t * 2, stops[0], stops[1]
+    else:
+        f, a, b = (t - 0.5) * 2, stops[1], stops[2]
+    return (_blend(a[0], b[0], f), _blend(a[1], b[1], f))
+
+
+def _bg_enabled(cfg: dict) -> bool:
+    return bool((cfg.get("display") or {}).get("weather_bg", True))
+
+
 def _display_bg(store: DataStore):
     """Shared background gradient for every page this cycle, or None if disabled."""
     cfg = store.cfg
-    if not cfg.get("display", {}).get("weather_bg", True):
+    if not _bg_enabled(cfg):
         return None
     try:
         weather = get_weather(store)

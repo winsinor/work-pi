@@ -228,6 +228,8 @@ _DEMO_PAGES: dict = {
     "calendar": {
         "_name": "calendar",
         "title": "Calendar",
+        # Urgency gradient (~15 min out — warm; see pages._ramp / _WARM_GRAD).
+        "bg": [[45, 23, 14], [65, 34, 19]],
         "lines": [
             {"text": "Design Review",          "color": "white", "wrap": True},
             {"text": "in 15 min",              "size": 3, "color": "red"},
@@ -239,6 +241,7 @@ _DEMO_PAGES: dict = {
     "calendar_empty": {
         "_name": "calendar_empty",
         "title": "Calendar",
+        "bg": _DEMO_BG,   # empty state falls back to the shared sky gradient
         "lines": [
             {"text": "No upcoming",             "size": 1, "color": "darkgrey"},
             {"text": "events today",            "size": 1, "color": "darkgrey"},
@@ -251,6 +254,8 @@ _DEMO_PAGES: dict = {
     "commute": {
         "_name": "commute",
         "title": "Commute Home",
+        # Traffic gradient (~+8 min on the worst route — warm; see pages._ramp).
+        "bg": [[45, 24, 14], [65, 36, 19]],
         "lines": [
             {"text": "Work → Home",              "size": 1, "color": "white"},
             {"text": "24 min",                   "size": 2, "color": "green"},

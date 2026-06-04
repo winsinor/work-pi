@@ -283,15 +283,20 @@ Active NWS alerts render as a full-width red banner strip (18px) just below the 
 
 When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` and render.py draws a 2px amber border around the entire frame. `_Cache.stale()` method handles the check. Clears automatically once data refreshes.
 
-## Weather-reactive background gradient
+## Reactive background gradients
 
-Every page can carry a `page["bg"] = [top_rgb, bottom_rgb]` and `render.py` fills a vertical gradient instead of the flat black background (`_fill_gradient()` — numpy fast path, per-row PIL fallback). One gradient is computed per cycle in `pages.py:_display_bg()` and applied to **all** pages via `build_display` (the sky is the same across the rotation).
+Every page can carry a `page["bg"] = [top_rgb, bottom_rgb]` and `render.py` fills a vertical gradient instead of the flat black background (`_fill_gradient()` — numpy fast path, per-row PIL fallback). All of this is gated by the single `display.weather_bg` toggle (`pages._bg_enabled()`; default `true`, checkbox in Settings → Display). When off, no page sets `bg` and everything renders on black. Gradients are deliberately **dark** so the existing bright (and coloured) text stays readable — hue carries the signal, not brightness.
 
-- `pages.py:_sky_gradient(cur, daily, now)` derives the colors: blue when clear → grey for clouds/rain (from `weather_code` + `precipitation_probability`), darkened at night and warm-tinted at dawn/dusk via `_sun_phase()` (uses today's `daily.sunrise`/`sunset`, falls back to an hour heuristic).
-- Colors are deliberately **dark** so the existing bright text stays readable — it evokes the sky, not a literal bright daytime blue. The forecast hourly grid keeps its own black panel.
-- Toggle: `config.json → display.weather_bg` (default `true`); checkbox in Settings → Display. When off, no `bg` is set and pages render on black.
+**Sky gradient (clock + forecast)** — one gradient computed per cycle in `pages._display_bg()` and applied to every page that doesn't set its own, via `build_display` (the sky is the same across the rotation).
+- `pages._sky_gradient(cur, daily, now)`: blue when clear → grey for clouds/rain (from `weather_code` + `precipitation_probability`), darkened at night and warm-tinted at dawn/dusk via `_sun_phase()` (uses today's `daily.sunrise`/`sunset`, hour-heuristic fallback). The forecast hourly grid keeps its own black panel.
+
+**Per-page reactive gradients** — set directly by the page builder, so they override the shared sky (`setdefault` in `build_display` leaves them alone):
+- **Calendar** (`build_calendar_page`): time-to-next-event urgency. `_ramp((_CALM_GRAD, _WARM_GRAD, _HOT_GRAD), (90 - mins) / 90)` — calm teal ≥90 min out, warming to amber then maroon as the next event nears. The empty-state page sets no `bg`, so it falls back to the sky gradient.
+- **Commute** (`build_commute_page`): traffic severity. `_ramp((_GO_GRAD, _WARM_GRAD, _HOT_GRAD), worst_delay_s / 600)` — green when clear → amber → maroon as the worst route's `traffic_delay_seconds` climbs (heavy ≈ 10 min added).
+- `_ramp(stops, t)` blends a 3-stop (calm, mid, hot) gradient; `_CALM_GRAD`/`_GO_GRAD`/`_WARM_GRAD`/`_HOT_GRAD` are the module-level palettes. They're kept dark because the urgency/ETA text is itself coloured (yellow/red, mid-luminance) and would wash out on a bright background.
+
 - Spotify/custom-image pages have their own renderers and ignore `bg`.
-- Editor preview: forecast demo pages in `setup_server._DEMO_PAGES` carry a sample `bg` (`_DEMO_BG`, clear-day) so layout text contrast is previewable.
+- Editor preview: `setup_server._DEMO_PAGES` carries sample `bg` values — `_DEMO_BG` (clear-day sky) on the forecast and empty-calendar demos, plus representative warm gradients on the `calendar`/`commute` demos — so layout text contrast is previewable.
 
 ## Layout editor
 
