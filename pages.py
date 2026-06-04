@@ -47,7 +47,9 @@ def build_weather_page(store: DataStore) -> dict:
 
     weather = get_weather(store)
     aqi     = get_aqi(store)
-    alert   = get_alerts(store)
+    # NWS alert banner muted for now — its positioning needs a fix (see todo.md).
+    # The fetch thread still keeps the cache warm, so unmuting is a one-line revert.
+    alert   = None
     lines: list[dict] = []
 
     cur    = weather.get("current", {})
@@ -124,7 +126,8 @@ def build_weather_page(store: DataStore) -> dict:
         page["aqi_overlay"] = aqi_overlay
     if alert:
         page["alert_banner"] = alert.lstrip("! ")
-    if store.weather.stale() or store.alerts.stale():
+    # Alerts are muted, so don't let alert-cache staleness trip the stale border.
+    if store.weather.stale():
         page["stale"] = True
     return page
 
