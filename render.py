@@ -293,11 +293,13 @@ def _vignette_t(x: int, y: int, W: int, H: int) -> float:
 
     Distance to the nearest edge, normalised by the band width, so the coloured
     edge fades to the center colour over a thin border and the middle stays the
-    flat center colour.
+    flat center colour. Corners use a Euclidean (rounded-rectangle) falloff so
+    the inner edge of the glow is rounded instead of a hard square.
     """
     band = max(1.0, min(W, H) / _VIGNETTE_BAND_DIV)
-    d = min(x, W - 1 - x, y, H - 1 - y)
-    return min(1.0, d / band)
+    cx = max(0.0, band - min(x, W - 1 - x))
+    cy = max(0.0, band - min(y, H - 1 - y))
+    return max(0.0, 1.0 - math.hypot(cx, cy) / band)
 
 
 def _vignette_at(edge: tuple, center: tuple, x: int, y: int, W: int, H: int) -> tuple:
@@ -320,7 +322,11 @@ def _fill_vignette(img: "Image.Image", edge: tuple, center: tuple) -> None:
         dx = _np.minimum(xs, W - 1 - xs)
         dy = _np.minimum(ys, H - 1 - ys)
         band = max(1.0, min(W, H) / _VIGNETTE_BAND_DIV)
-        t = _np.clip(_np.minimum(dx, dy).astype(_np.float32) / band, 0.0, 1.0)  # H×W
+        # Rounded-rectangle falloff: Euclidean distance from the inset core so
+        # the inner edge of the glow has rounded corners, not square ones.
+        cx = _np.clip(band - dx, 0, None).astype(_np.float32)
+        cy = _np.clip(band - dy, 0, None).astype(_np.float32)
+        t = _np.clip(1.0 - _np.hypot(cx, cy) / band, 0.0, 1.0)  # H×W
         e = _np.array(edge, _np.float32)
         c = _np.array(center, _np.float32)
         arr = e * (1.0 - t)[..., None] + c * t[..., None]   # H×W×3
