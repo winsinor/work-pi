@@ -395,9 +395,9 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
     ics_url = cfg["calendar"].get("ics_url", "").strip()
     if not ics_url or not _ICS_AVAILABLE:
         return []
+    r = requests.get(ics_url, timeout=15)
+    r.raise_for_status()
     try:
-        r = requests.get(ics_url, timeout=15)
-        r.raise_for_status()
         cal    = icalendar.Calendar.from_ical(r.content)
         now    = local_now(store.cfg)
         start  = now - timedelta(minutes=30)
@@ -437,8 +437,7 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
         events.sort(key=lambda e: e["start_iso"])
         return events
     except Exception as exc:
-        print(f"[ics] fetch failed: {exc}")
-        return []
+        raise RuntimeError(f"ICS parse error: {exc}") from exc
 
 
 def get_ics_events(store: DataStore) -> list[dict]:
