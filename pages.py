@@ -183,7 +183,7 @@ def build_commute_page(store: DataStore) -> dict | None:
         # climbs (heavy ≈ 10 min added).
         worst = max((r.get("traffic_delay_seconds", 0) for r in data.get("routes", [])),
                     default=0)
-        page["bg"] = _ramp((_GO_GRAD, _WARM_GRAD, _HOT_GRAD), worst / 600)
+        page["bg_vignette"] = _ramp((_GO_VIG, _WARM_VIG, _HOT_VIG), worst / 600)
     return page
 
 
@@ -278,7 +278,7 @@ def build_calendar_page(store: DataStore) -> dict | None:
         page["stale"] = True
     if _bg_enabled(store.cfg):
         # Calm ≥90 min out, warming to amber then red as the next event nears.
-        page["bg"] = _ramp((_CALM_GRAD, _WARM_GRAD, _HOT_GRAD), (90 - mins) / 90)
+        page["bg_vignette"] = _ramp((_CALM_VIG, _WARM_VIG, _HOT_VIG), (90 - mins) / 90)
     return page
 
 
@@ -406,22 +406,22 @@ def _sky_gradient(cur: dict, daily: dict, now: datetime) -> tuple:
     return base  # day
 
 
-# Reactive gradients for calendar urgency + commute traffic. Kept dark so the
-# bright page text stays readable (same principle as the sky gradient).
-# Kept dark on purpose: the urgency text itself is coloured (yellow/red), and
-# those are mid-luminance, so the background must stay dark to keep them legible.
-# Hue carries the signal — teal/green (calm) → amber → maroon (urgent).
-_CALM_GRAD = ((16, 32, 40), (26, 50, 60))    # cool teal — relaxed (calendar)
-_GO_GRAD   = ((14, 36, 24), (24, 54, 38))    # green — clear roads (commute)
-_WARM_GRAD = ((44, 34, 14), (64, 50, 18))    # amber — heads up
-_HOT_GRAD  = ((46, 18, 14), (66, 26, 20))    # maroon — urgent
+# Reactive vignette palettes for calendar urgency + commute traffic. Each stop is
+# an (edge, center) pair: a saturated status colour glows around the display
+# border and fades to a dark, text-safe core. Edges are bright enough to read at
+# a glance; the dark center keeps the (often coloured) page text legible.
+# Hue carries the signal — teal/green (calm) → amber → red (urgent).
+_CALM_VIG = ((26,  92, 110), (10, 26, 32))   # teal  — relaxed (calendar)
+_GO_VIG   = ((26, 120,  60), ( 8, 30, 18))   # green — clear roads (commute)
+_WARM_VIG = ((150, 100,  24), (30, 22,  8))  # amber — heads up
+_HOT_VIG  = ((165,  44,  32), (32, 12, 10))  # red   — urgent
 
 
 def _ramp(stops: tuple, t: float) -> tuple:
-    """Blend a 3-stop (calm, mid, hot) gradient by t in [0, 1].
+    """Blend a 3-stop (calm, mid, hot) palette by t in [0, 1].
 
-    Each stop is a (top_rgb, bottom_rgb) pair; top and bottom blend
-    independently so the result is itself a (top, bottom) gradient.
+    Each stop is an (edge, center) pair; edge and center blend independently so
+    the result is itself an (edge, center) vignette pair.
     """
     t = max(0.0, min(1.0, t))
     if t <= 0.5:

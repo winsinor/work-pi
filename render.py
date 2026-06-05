@@ -282,6 +282,49 @@ def _fill_gradient(img: "Image.Image", top: tuple, bottom: tuple) -> None:
                    fill=tuple(int(top[i] * (1 - f) + bottom[i] * f) for i in range(3)))
 
 
+def _vignette_t(x: int, y: int, W: int, H: int) -> float:
+    """0.0 at the nearest display edge → 1.0 at the center band.
+
+    Distance to the nearest edge, normalised by half the short dimension, so the
+    coloured edge fades to the center colour over the outer ~half of the frame.
+    """
+    maxd = max(1.0, min(W, H) / 2.0)
+    d = min(x, W - 1 - x, y, H - 1 - y)
+    return min(1.0, d / maxd)
+
+
+def _vignette_at(edge: tuple, center: tuple, x: int, y: int, W: int, H: int) -> tuple:
+    """Interpolated vignette colour at pixel (x, y): edge→center by distance."""
+    t = _vignette_t(x, y, W, H)
+    return tuple(int(edge[i] * (1 - t) + center[i] * t) for i in range(3))
+
+
+def _fill_vignette(img: "Image.Image", edge: tuple, center: tuple) -> None:
+    """Paint a vignette: saturated `edge` colour around the border fading inward
+    to a dark `center` colour, in place. Keeps the readable dark core for text
+    while making the page's status colour pop at the display edges.
+    """
+    W, H = img.size
+    if W <= 1 or H <= 1:
+        return
+    if _NUMPY:
+        ys = _np.arange(H).reshape(H, 1)
+        xs = _np.arange(W).reshape(1, W)
+        dx = _np.minimum(xs, W - 1 - xs)
+        dy = _np.minimum(ys, H - 1 - ys)
+        maxd = max(1.0, min(W, H) / 2.0)
+        t = _np.clip(_np.minimum(dx, dy).astype(_np.float32) / maxd, 0.0, 1.0)  # H×W
+        e = _np.array(edge, _np.float32)
+        c = _np.array(center, _np.float32)
+        arr = e * (1.0 - t)[..., None] + c * t[..., None]   # H×W×3
+        img.paste(Image.fromarray(arr.astype(_np.uint8), "RGB"))
+    else:
+        d = ImageDraw.Draw(img)
+        for y in range(H):
+            for x in range(W):
+                d.point((x, y), fill=_vignette_at(edge, center, x, y, W, H))
+
+
 # ── Fonts ────────────────────────────────────────────────────────────────────────
 
 _pil_font_cache: dict = {}
@@ -1179,12 +1222,27 @@ def render_page_pil(page: dict, layout: dict | None = None,
     gap_min = layout["content"]["line_gap_min"]
 
     img  = Image.new("RGB", (W, H), (0, 0, 0))
-    _bg = page.get("bg")
-    if _bg:
+    _bg  = page.get("bg")            # vertical [top, bottom] gradient (sky)
+    _bgv = page.get("bg_vignette")   # edge→center [edge, center] vignette (status)
+    if _bgv:
+        try:
+            _fill_vignette(img, tuple(_bgv[0]), tuple(_bgv[1]))
+        except Exception as exc:
+            print(f"[render] vignette: {exc}")
+    elif _bg:
         try:
             _fill_gradient(img, tuple(_bg[0]), tuple(_bg[1]))
         except Exception as exc:
             print(f"[render] gradient: {exc}")
+
+    def _bg_sample(y: int) -> "tuple | None":
+        """Background colour beneath a (horizontally-centered) line at row y."""
+        if _bgv:
+            return _vignette_at(tuple(_bgv[0]), tuple(_bgv[1]), W // 2, y, W, H)
+        if _bg:
+            return _bg_row(_bg, y, H)
+        return None
+
     draw = ImageDraw.Draw(img)
 
     if hh > 0:
@@ -1273,10 +1331,10 @@ def render_page_pil(page: dict, layout: dict | None = None,
             # `y` reproduces the identical y_top on the next render.
             line_centers[i] = y_top + pos_h // 2
         # Adaptive contrast: brighten text toward white only as much as the local
-        # background row requires. Large text (≥19px bold) uses the 3:1 WCAG
-        # threshold; smaller text uses 4.5:1.
-        if _bg:
-            bg_here   = _bg_row(_bg, y_top + pos_h // 2, H)
+        # background (gradient row or vignette) requires. Large text (≥19px bold)
+        # uses the 3:1 WCAG threshold; smaller text uses 4.5:1.
+        bg_here = _bg_sample(y_top + pos_h // 2)
+        if bg_here:
             min_ratio = 3.0 if pos_h >= 19 else 4.5
             color = _contrast_safe(color, bg_here, min_ratio)
             rc    = _contrast_safe(rc, bg_here, min_ratio)
