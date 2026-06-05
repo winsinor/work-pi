@@ -556,7 +556,7 @@ def _render_aqi_overlay(draw, aqi: dict, layout: dict):
     draw.text((cx - vw // 2, y0 + lh + 2), val, font=val_f, fill=color)
 
 
-def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
+def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict, img=None, _bg=None):
     W    = layout["canvas"]["width"]
     H    = layout["canvas"]["height"]
     cols = min(layout["grid"]["columns"], len(items)) if items else layout["grid"]["columns"]
@@ -564,7 +564,26 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict):
         return
     col_w   = W // cols
     sep_col = (50, 50, 50)
-    draw.rectangle([0, grid_top, W, H], fill=(0, 0, 0))
+    # Grid background: if the page has a sky gradient, continue it darkened rather
+    # than cutting to hard black — eliminates the jarring "black bar" look.
+    if _bg and img is not None:
+        sky_at_top = _bg_row(_bg, grid_top, H)
+        # 40% of sky color at top, fading to black at bottom
+        grid_top_c = tuple(int(c * 0.40) for c in sky_at_top)
+        rows = H - grid_top
+        if _NUMPY:
+            t = _np.array(grid_top_c, _np.float32)
+            f = _np.linspace(0.0, 1.0, rows, dtype=_np.float32).reshape(rows, 1)
+            arr_row = (t * (1 - f)).clip(0, 255).astype(_np.uint8)  # (rows, 3)
+            arr = _np.repeat(arr_row[:, _np.newaxis, :], W, axis=1)  # (rows, W, 3)
+            img.paste(Image.fromarray(arr, "RGB"), (0, grid_top))
+        else:
+            for row_y in range(grid_top, H):
+                f = (row_y - grid_top) / max(1, rows - 1)
+                c = tuple(int(grid_top_c[i] * (1 - f)) for i in range(3))
+                draw.line([(0, row_y), (W, row_y)], fill=c)
+    else:
+        draw.rectangle([0, grid_top, W, H], fill=(0, 0, 0))
     draw.line([(0, grid_top), (W, grid_top)], fill=sep_col, width=1)
     lbl_f = _get_font(layout["grid"]["label_size"], layout)
     tmp_f = _get_font(layout["grid"]["temp_size"], layout)
@@ -1499,7 +1518,7 @@ def render_page_pil(page: dict, layout: dict | None = None,
     if page.get("aqi_overlay"):
         _render_aqi_overlay(draw, page["aqi_overlay"], layout)
     if grid_items:
-        _render_hourly_grid(draw, grid_items, grid_top, layout)
+        _render_hourly_grid(draw, grid_items, grid_top, layout, img=img, _bg=_bg)
 
     if page.get("stale"):
         draw.rectangle([0, 0, W - 1, H - 1], outline=(140, 90, 0), width=2)
