@@ -633,6 +633,91 @@ def _min_gray_for_contrast(bg_lum: float, ratio: float) -> int:
     return int((target ** (1.0 / 2.4) * 1.055 - 0.055) * 255)
 
 
+def _bg_row(bg, y: int, H: int) -> tuple:
+    """Return the gradient's interpolated RGB at row y (top→bottom), or black."""
+    if not bg:
+        return (0, 0, 0)
+    top, bottom = tuple(bg[0]), tuple(bg[1])
+    f = 0.0 if H <= 1 else max(0.0, min(1.0, y / (H - 1)))
+    return tuple(int(top[i] * (1 - f) + bottom[i] * f) for i in range(3))
+
+
+def _contrast_ratio(lum_a: float, lum_b: float) -> float:
+    hi, lo = (lum_a, lum_b) if lum_a >= lum_b else (lum_b, lum_a)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _hue_dist(h1: float, h2: float) -> float:
+    """Circular distance between two hues in [0, 1] (wraps at 1.0)."""
+    d = abs(h1 - h2)
+    return min(d, 1.0 - d)
+
+
+# Chromatic-collision tuning. Same-hue text on a coloured background reads poorly
+# even when its luminance contrast is technically adequate (e.g. cyan on a blue
+# sky). When the text and background hues are within HUE_TOL and both are
+# saturated, the text is blended toward white until it either clears COMFORT_RATIO
+# or is muted below SAT_TARGET — whichever comes first.
+_HUE_TOL      = 0.14   # ~50° on the colour wheel
+_TEXT_SAT_MIN = 0.25   # only colourful text can "collide"
+_BG_SAT_MIN   = 0.12   # only colourful backgrounds cause a collision
+_SAT_TARGET   = 0.25   # mute the tint down to roughly this once corrected
+_COMFORT_RATIO = 7.0   # extra luminance margin sought when hues collide
+
+
+def _contrast_safe(color: tuple, bg: tuple, min_ratio: float = 4.5) -> tuple:
+    """Make `color` readable against `bg`, blending toward white only as needed.
+
+    Two passes:
+      1. Luminance floor — lift toward white until WCAG contrast ≥ min_ratio.
+         Fixes dim neutrals (grey/darkgrey) on bright backgrounds while leaving
+         them dim on dark ones (hierarchy preserved).
+      2. Chromatic collision — if the (corrected) text shares a hue with a
+         saturated background, blend further toward white until it separates.
+         Fixes cyan-on-blue, which passes pass 1 yet still reads poorly.
+
+    Status hues (yellow/green/orange) sit far from the cool page backgrounds in
+    hue, so they skip pass 2 and pass through unchanged.
+    """
+    import colorsys
+    bg_lum = _wcag_lum(*bg)
+
+    # ── Pass 1: luminance floor ──────────────────────────────────────────────
+    out  = color
+    need = min_ratio * (bg_lum + 0.05) - 0.05
+    if need > 0 and _wcag_lum(*out) < need:
+        lo, hi = 0.0, 1.0
+        for _ in range(12):
+            t    = (lo + hi) / 2
+            cand = tuple(int(color[i] * (1 - t) + 255 * t) for i in range(3))
+            if _wcag_lum(*cand) >= need:
+                hi = t
+            else:
+                lo = t
+        out = tuple(int(color[i] * (1 - hi) + 255 * hi) for i in range(3))
+
+    # ── Pass 2: chromatic collision ──────────────────────────────────────────
+    hb, sb, _ = colorsys.rgb_to_hsv(bg[0] / 255, bg[1] / 255, bg[2] / 255)
+    hc, sc, _ = colorsys.rgb_to_hsv(out[0] / 255, out[1] / 255, out[2] / 255)
+    if (sc > _TEXT_SAT_MIN and sb > _BG_SAT_MIN
+            and _hue_dist(hc, hb) < _HUE_TOL
+            and _contrast_ratio(_wcag_lum(*out), bg_lum) < _COMFORT_RATIO):
+        base = out
+        lo, hi = 0.0, 1.0
+        for _ in range(12):
+            t    = (lo + hi) / 2
+            cand = tuple(int(base[i] * (1 - t) + 255 * t) for i in range(3))
+            cand_sat = colorsys.rgb_to_hsv(cand[0] / 255, cand[1] / 255, cand[2] / 255)[1]
+            if (_contrast_ratio(_wcag_lum(*cand), bg_lum) >= _COMFORT_RATIO
+                    or cand_sat <= _SAT_TARGET):
+                hi = t
+            else:
+                lo = t
+        out = tuple(int(base[i] * (1 - hi) + 255 * hi) for i in range(3))
+
+    return out
+
+
 def _adaptive_text_colors(bg: tuple) -> tuple:
     """Return (title_color, artist_color, album_color) with readable contrast against bg."""
     bg_lum = _wcag_lum(*bg)
@@ -1187,6 +1272,14 @@ def render_page_pil(page: dict, layout: dict | None = None,
             # Same value whether auto or explicit: storing this as an explicit
             # `y` reproduces the identical y_top on the next render.
             line_centers[i] = y_top + pos_h // 2
+        # Adaptive contrast: brighten text toward white only as much as the local
+        # background row requires. Large text (≥19px bold) uses the 3:1 WCAG
+        # threshold; smaller text uses 4.5:1.
+        if _bg:
+            bg_here   = _bg_row(_bg, y_top + pos_h // 2, H)
+            min_ratio = 3.0 if pos_h >= 19 else 4.5
+            color = _contrast_safe(color, bg_here, min_ratio)
+            rc    = _contrast_safe(rc, bg_here, min_ratio)
         right_bound = W - rm
         tw, _ = _text_size(draw, text, f)
 
