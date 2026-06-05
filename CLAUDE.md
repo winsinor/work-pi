@@ -287,7 +287,7 @@ When a data source hasn't refreshed in 2× its TTL, the page gets `stale=True` a
 
 Pages carry one of two background keys, both gated by the single `display.weather_bg` toggle (`pages._bg_enabled()`; default `true`, checkbox in Settings → Display). When off, no page sets either and everything renders on black.
 - `page["bg"] = [top_rgb, bottom_rgb]` → `render.py` fills a **vertical gradient** (`_fill_gradient()`). Used by the sky.
-- `page["bg_vignette"] = [edge_rgb, center_rgb]` → `render.py` fills an **edge→center vignette** (`_fill_vignette()`): saturated status colour glows around the display border and fades to a dark, text-safe core (`_vignette_t()`/`_vignette_at()` give the falloff — distance to the nearest edge over half the short dimension). Used by the per-page status backgrounds. `bg_vignette` takes precedence over `bg` if both are present.
+- `page["bg_vignette"] = [edge_rgb, center_rgb]` → `render.py` fills an **edge→center vignette** (`_fill_vignette()`): saturated status colour glows in a thin band around the display border and fades to the center colour (the status palettes use a **black** center, so the middle of the screen stays black for legible text). `_vignette_t()`/`_vignette_at()` give the falloff — distance to the nearest edge over a band of `min(W,H) / _VIGNETTE_BAND_DIV` px (`_VIGNETTE_BAND_DIV = 8.0` → ~30px on a 240px-tall display). Used by the per-page status backgrounds. `bg_vignette` takes precedence over `bg` if both are present.
 
 Both paths have a numpy fast path + a PIL fallback.
 

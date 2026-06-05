@@ -229,7 +229,7 @@ _DEMO_PAGES: dict = {
         "_name": "calendar",
         "title": "Calendar",
         # Urgency vignette (~15 min out — warm; see pages._ramp / _WARM_VIG).
-        "bg_vignette": [[160, 62, 29], [31, 15, 9]],
+        "bg_vignette": [[160, 62, 29], [0, 0, 0]],
         "lines": [
             {"text": "Design Review",          "color": "white", "wrap": True},
             {"text": "in 15 min",              "size": 3, "color": "red"},
@@ -255,7 +255,7 @@ _DEMO_PAGES: dict = {
         "_name": "commute",
         "title": "Commute Home",
         # Traffic vignette (~+8 min on the worst route — warm; see pages._ramp).
-        "bg_vignette": [[159, 66, 28], [31, 15, 9]],
+        "bg_vignette": [[159, 66, 28], [0, 0, 0]],
         "lines": [
             {"text": "Work → Home",              "size": 1, "color": "white"},
             {"text": "24 min",                   "size": 2, "color": "green"},

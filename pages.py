@@ -407,14 +407,14 @@ def _sky_gradient(cur: dict, daily: dict, now: datetime) -> tuple:
 
 
 # Reactive vignette palettes for calendar urgency + commute traffic. Each stop is
-# an (edge, center) pair: a saturated status colour glows around the display
-# border and fades to a dark, text-safe core. Edges are bright enough to read at
-# a glance; the dark center keeps the (often coloured) page text legible.
+# an (edge, center) pair: a saturated status colour glows in a thin band around
+# the display border and fades to a black center, so the middle of the screen
+# stays black and the (often coloured) page text there is fully legible.
 # Hue carries the signal — teal/green (calm) → amber → red (urgent).
-_CALM_VIG = ((26,  92, 110), (10, 26, 32))   # teal  — relaxed (calendar)
-_GO_VIG   = ((26, 120,  60), ( 8, 30, 18))   # green — clear roads (commute)
-_WARM_VIG = ((150, 100,  24), (30, 22,  8))  # amber — heads up
-_HOT_VIG  = ((165,  44,  32), (32, 12, 10))  # red   — urgent
+_CALM_VIG = ((26,  92, 110), (0, 0, 0))   # teal  — relaxed (calendar)
+_GO_VIG   = ((26, 120,  60), (0, 0, 0))   # green — clear roads (commute)
+_WARM_VIG = ((150, 100,  24), (0, 0, 0))  # amber — heads up
+_HOT_VIG  = ((165,  44,  32), (0, 0, 0))  # red   — urgent
 
 
 def _ramp(stops: tuple, t: float) -> tuple:

@@ -282,15 +282,22 @@ def _fill_gradient(img: "Image.Image", top: tuple, bottom: tuple) -> None:
                    fill=tuple(int(top[i] * (1 - f) + bottom[i] * f) for i in range(3)))
 
 
-def _vignette_t(x: int, y: int, W: int, H: int) -> float:
-    """0.0 at the nearest display edge → 1.0 at the center band.
+# Vignette band width as a divisor of the short display dimension: the coloured
+# edge fades fully to the center colour over (min(W,H) / _VIGNETTE_BAND_DIV) px.
+# 8.0 → a ~30px glow on a 240px-tall display, leaving the middle solid center.
+_VIGNETTE_BAND_DIV = 8.0
 
-    Distance to the nearest edge, normalised by half the short dimension, so the
-    coloured edge fades to the center colour over the outer ~half of the frame.
+
+def _vignette_t(x: int, y: int, W: int, H: int) -> float:
+    """0.0 at the nearest display edge → 1.0 once past the glow band.
+
+    Distance to the nearest edge, normalised by the band width, so the coloured
+    edge fades to the center colour over a thin border and the middle stays the
+    flat center colour.
     """
-    maxd = max(1.0, min(W, H) / 2.0)
+    band = max(1.0, min(W, H) / _VIGNETTE_BAND_DIV)
     d = min(x, W - 1 - x, y, H - 1 - y)
-    return min(1.0, d / maxd)
+    return min(1.0, d / band)
 
 
 def _vignette_at(edge: tuple, center: tuple, x: int, y: int, W: int, H: int) -> tuple:
@@ -312,8 +319,8 @@ def _fill_vignette(img: "Image.Image", edge: tuple, center: tuple) -> None:
         xs = _np.arange(W).reshape(1, W)
         dx = _np.minimum(xs, W - 1 - xs)
         dy = _np.minimum(ys, H - 1 - ys)
-        maxd = max(1.0, min(W, H) / 2.0)
-        t = _np.clip(_np.minimum(dx, dy).astype(_np.float32) / maxd, 0.0, 1.0)  # H×W
+        band = max(1.0, min(W, H) / _VIGNETTE_BAND_DIV)
+        t = _np.clip(_np.minimum(dx, dy).astype(_np.float32) / band, 0.0, 1.0)  # H×W
         e = _np.array(edge, _np.float32)
         c = _np.array(center, _np.float32)
         arr = e * (1.0 - t)[..., None] + c * t[..., None]   # H×W×3
