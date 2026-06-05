@@ -89,7 +89,7 @@ def build_weather_page(store: DataStore) -> dict:
 
     later = later_today_desc(hourly, now)
     if later:
-        lines.append({"text": later, "size": 0, "color": "darkgrey", "left_align": True})
+        lines.append({"text": later, "size": 0, "color": "white", "left_align": True})
 
     aqi_overlay = None
     if aqi.get("aqi") is not None:
@@ -230,8 +230,8 @@ def build_calendar_page(store: DataStore) -> dict | None:
                 title = ev.get("title", "Event")
                 label    = "Next" if i == 0 else "Then"
                 time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
-                lines.append({"text": f"{label}: {title}", "color": "grey"})
-                lines.append({"text": time_str, "size": 1, "color": "grey"})
+                lines.append({"text": f"{label}: {title}", "color": "white"})
+                lines.append({"text": time_str, "size": 1, "color": "white"})
             except Exception:
                 pass
         page = {"_name": "calendar_empty", "title": "Calendar", "lines": lines}
@@ -260,18 +260,18 @@ def build_calendar_page(store: DataStore) -> dict | None:
         start = datetime.fromisoformat(nxt["start_iso"])
         end   = datetime.fromisoformat(nxt["end_iso"])
         lines.append({"text": f"{start.strftime('%-I:%M')} - {end.strftime('%-I:%M %p')}",
-                      "size": 1, "color": "grey"})
+                      "size": 1, "color": "white"})
     except Exception:
         pass
 
     loc = nxt.get("location", "").strip()
-    lines.append({"text": loc, "size": 0, "color": "grey"})
+    lines.append({"text": loc, "size": 0, "color": "white"})
 
     if len(upcoming) > 1:
         t2 = upcoming[1].get("title", "")
-        lines.append({"text": f"Then: {t2}", "color": "grey"})
+        lines.append({"text": f"Then: {t2}", "color": "white"})
     else:
-        lines.append({"text": "nothing after this event", "color": "grey"})
+        lines.append({"text": "nothing after this event", "color": "white"})
 
     page = {"_name": "calendar", "title": "Calendar", "lines": lines}
     if store.ics_events.stale():

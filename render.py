@@ -501,7 +501,7 @@ def _render_aqi_overlay(draw, aqi: dict, layout: dict):
     lbl_f = _get_font(layout["aqi"]["label_size"], layout)
     val_f = _get_font(layout["aqi"]["value_size"], layout)
     lw, lh = _text_size(draw, "AQI", lbl_f)
-    draw.text((cx - lw // 2, y0), "AQI", font=lbl_f, fill=(200, 200, 200))
+    draw.text((cx - lw // 2, y0), "AQI", font=lbl_f, fill=(255, 255, 255))
     vw, _  = _text_size(draw, val, val_f)
     draw.text((cx - vw // 2, y0 + lh + 2), val, font=val_f, fill=color)
 
