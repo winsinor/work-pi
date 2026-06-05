@@ -211,8 +211,8 @@ def build_calendar_page(store: DataStore) -> dict | None:
 
     if not upcoming:
         lines: list[dict] = [
-            {"text": "No upcoming", "size": 1, "color": "darkgrey"},
-            {"text": "events today", "size": 1, "color": "darkgrey"},
+            {"text": "No upcoming", "size": 1, "color": "white"},
+            {"text": "events today", "size": 1, "color": "white"},
         ]
         # Find next 1-2 events from any future day (up to 7 days out)
         future = []
