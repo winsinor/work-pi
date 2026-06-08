@@ -104,7 +104,12 @@ def _launch_prerender(page: dict, layout: dict, rotate_180: bool) -> None:
     def _work():
         try:
             data = render_page_rgb565(page, layout, rotate_180=rotate_180)
-            _prerender_cache[pid] = data
+            # Store the page object alongside its frame. Holding the reference
+            # keeps the object alive so its id() can't be recycled while cached,
+            # and lets the consumer verify identity before reusing the frame —
+            # otherwise an orphaned frame can be served for an unrelated page
+            # dict that happens to land on the same recycled id().
+            _prerender_cache[pid] = (page, data)
         except Exception as exc:
             print(f"[prerender] {exc}")
     threading.Thread(target=_work, daemon=True).start()
@@ -504,7 +509,10 @@ def main():
             _pn = _pname
             _spotify_page_active = (_pn == "spotify")
             pid = id(page)
-            cached_frame = _prerender_cache.pop(pid, None)
+            _pre = _prerender_cache.pop(pid, None)
+            # Only reuse a pre-rendered frame if it was rendered for THIS exact
+            # page object — guards against id() reuse serving a stale frame.
+            cached_frame = _pre[1] if (_pre is not None and _pre[0] is page) else None
             try:
                 frame = cached_frame if cached_frame is not None else \
                         render_page_rgb565(page, layout, rotate_180=(rot == 180))
