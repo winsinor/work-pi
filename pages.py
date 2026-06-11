@@ -387,8 +387,8 @@ def _sky_gradient(cur: dict, daily: dict, now: datetime) -> tuple:
     # Daytime base: saturated blue when clear → greyer as clouds/rain increase
     if   code in (0, 1):       base = ((18, 44, 92), (44, 92, 158))  # clear
     elif code == 2:            base = ((26, 46, 80), (52, 86, 134))  # partly cloudy
-    elif code in (3, 45, 48):  base = ((40, 46, 56), (70, 78, 90))   # overcast / fog
-    else:                      base = ((30, 38, 50), (54, 64, 78))   # precipitation
+    elif code in (3, 45, 48):  base = ((178, 90, 110), (123, 137, 158))  # overcast / fog
+    else:                      base = ((54, 64, 78), (70, 89, 117))   # precipitation
     if precip >= 55 and code not in (0, 1):
         base = ((30, 36, 46), (50, 58, 70))                          # likely rain → grey
 
