@@ -76,6 +76,7 @@ sudo evtest /dev/input/event4
 | `editor/work/` | Layout editor (HTML + JS + CSS) |
 | `deploy` | One-liner update script: git pull + rsync + restart |
 | `auto-deploy.sh` | Auto-deploy script run by systemd timer every 2 min |
+| `harden.sh` | SD-card / power-loss hardening (swap→zram, volatile logs, masked timers, gpu_mem, noatime) — idempotent, reversible, `--dry-run` |
 | `config.json` | Operational config — **gitignored, never commit** |
 | `work_layout.json` | Visual layout overrides — committed, edited via `/editor/work` |
 | `config.example.json` | Template for config.json |
@@ -341,6 +342,20 @@ Both paths have a numpy fast path + a PIL fallback.
 3. add `"name"` to the matching group's array in the `GROUPS` map (`setup` / `settings` / `layout`).
 
 Forgetting the `GROUPS` entry means the tab never shows (group navigation only walks the array); a wrong `data-group` puts it in the wrong segment. `goTo()` indexes within the active group, so order in the array is the swipe/dot order.
+
+## SD-card / power-loss hardening (`harden.sh`)
+
+Unexpected power loss corrupts the SD card only if something is mid-write. At
+runtime this app writes ~nothing to the card (frames → `/dev/fb1`, data cached in
+RAM, config/layout written only on user action and atomically via `os.replace`),
+so the wear/corruption risk is almost entirely **OS-level**. `harden.sh` targets that:
+
+- **swap → zram** (compressed RAM swap, no card writes); reclaims `gpu_mem` (no HDMI) so swap-light is safe on 512MB
+- **journald `Storage=volatile`** (RAM, capped) + disables `rsyslog` — logs stop hitting the card
+- **masks** `apt-daily{,-upgrade}.timer` and `man-db.timer` (periodic write/wakeup churn)
+- **`noatime`** on root + **`/tmp` on tmpfs**
+
+Idempotent, backs up every edited file to `<file>.harden.bak`, supports `--dry-run`, never reboots on its own. It deliberately does **not** make the card read-only (separate, riskier — overlay root + `rw`/`ro` toggling), remove `fake-hwclock` writes (needs a DS3231 RTC, which also fixes the cold-boot clock), or change the `auto-deploy.timer` git-fetch cadence (every 2 min rewrites `.git/FETCH_HEAD` — lengthen or disable for fewer writes).
 
 ## Known Pi environment gotchas
 
