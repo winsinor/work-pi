@@ -816,7 +816,7 @@ while the stats overlay is visible. The display shows "Hold to Power Off" as
 a button in the stats overlay. The sequence:
 
 1. Display turns dark red
-2. "Safe to unplug" appears
+2. "Safe to unplug when screen turns white" appears
 3. Display turns white
 4. `sudo shutdown -h now` is called
 

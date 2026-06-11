@@ -347,6 +347,7 @@ def build_shutdown_page() -> dict:
         "title": "Shutting Down",
         "lines": [
             {"text": "Safe to unplug", "size": 2, "color": "white"},
+            {"text": "when screen turns white", "size": 1, "color": "white"},
         ],
     }
 
