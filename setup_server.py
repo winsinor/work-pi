@@ -220,6 +220,69 @@ def _get_local_ip() -> str:
             pass
 
 
+def _in_cgnat(ip: str) -> bool:
+    """True if ip is in 100.64.0.0/10 — the CGNAT range Tailscale assigns."""
+    try:
+        a, b = (int(x) for x in ip.split(".")[:2])
+    except (ValueError, IndexError):
+        return False
+    return a == 100 and 64 <= b <= 127
+
+
+def _tailscale_ip() -> str | None:
+    """Best-effort lookup of this node's Tailscale IPv4, or None if not up."""
+    # Canonical source: the tailscale CLI.
+    try:
+        r = subprocess.run(["tailscale", "ip", "-4"],
+                           capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            ip = line.strip()
+            if _in_cgnat(ip):
+                return ip
+    except Exception:
+        pass
+    # Fallback: scan interface addresses for the CGNAT range (covers setups
+    # where the CLI isn't on PATH but the tailscale0 interface is up).
+    try:
+        r = subprocess.run(["ip", "-4", "-o", "addr", "show"],
+                           capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if "inet" in parts:
+                ip = parts[parts.index("inet") + 1].split("/")[0]
+                if _in_cgnat(ip):
+                    return ip
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_bind(mode: str) -> tuple:
+    """Map a setup_bind setting to (host, human_description).
+
+    'all'       → 0.0.0.0   (LAN + Tailscale + everything; original behaviour)
+    'tailscale' → the node's Tailscale IP only (not reachable from the LAN)
+    'localhost' → 127.0.0.1 (on-device only)
+    <ip>        → that exact address
+
+    'tailscale' fails safe: if no Tailscale address is found it binds to
+    localhost rather than silently falling back to LAN-wide exposure.
+    """
+    m = (mode or "all").strip().lower()
+    if m in ("", "all", "0.0.0.0", "any"):
+        return "0.0.0.0", "all interfaces (LAN + Tailscale)"
+    if m in ("localhost", "loopback", "127.0.0.1"):
+        return "127.0.0.1", "localhost only"
+    if m == "tailscale":
+        ip = _tailscale_ip()
+        if ip:
+            return ip, f"Tailscale only ({ip})"
+        print("[setup] WARNING: setup_bind=tailscale but no Tailscale IP found; "
+              "binding to localhost to avoid exposing the LAN.")
+        return "127.0.0.1", "Tailscale unavailable — localhost only"
+    return mode, f"custom address ({mode})"
+
+
 # ── WiFi helpers (nmcli) ──────────────────────────────────────────────────────────────
 
 _NM_UNMANAGED_CONF = "/etc/NetworkManager/conf.d/99-unmanaged-wifi.conf"
@@ -1132,20 +1195,35 @@ _server: HTTPServer | None = None
 
 
 def start(port: int) -> str:
-    """Start the setup HTTP server in a daemon thread. Returns the local IP."""
+    """Start the setup HTTP server in a daemon thread.
+
+    Binds according to config `setup_bind` (default 'all'). Returns the address
+    to advertise — the bound IP for a specific bind, else the LAN IP.
+    """
     global _server
     if _server is not None:
         return _get_local_ip()
+    mode = (cfg_module.load().get("setup_bind") or "all")
+    host, desc = _resolve_bind(mode)
     HTTPServer.allow_reuse_address = True
-    _server = HTTPServer(("0.0.0.0", port), SetupHandler)
+    try:
+        _server = HTTPServer((host, port), SetupHandler)
+    except OSError as exc:
+        # e.g. the chosen address vanished (Tailscale dropped) — fail safe to
+        # localhost rather than the whole LAN.
+        print(f"[setup] could not bind {host}:{port} ({exc}); using 127.0.0.1")
+        host, desc = "127.0.0.1", "localhost only (bind fallback)"
+        _server = HTTPServer((host, port), SetupHandler)
 
     def _run():
-        print(f"[setup] listening on port {port}")
+        print(f"[setup] listening on {host}:{port} — {desc}")
         _server.serve_forever()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
-    return _get_local_ip()
+    # Advertise the actual bound IP when it's a concrete address; for 0.0.0.0
+    # fall back to the routable LAN IP so the on-screen URL is reachable.
+    return host if host not in ("0.0.0.0",) else _get_local_ip()
 
 
 def stop():

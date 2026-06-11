@@ -154,6 +154,15 @@ The server binds `0.0.0.0` and exposes config + WiFi/system control, so it's pas
 - **Endpoints**: `POST /api/auth/login` (sets cookie, per-IP throttle 8/5min), `POST /api/auth/logout`, `POST /api/auth/set-password {current,new}` (min 8 chars), `GET /api/auth/status`.
 - The `auth` section is **stripped from `GET /api/config`** and **dropped from `POST /api/config`** — it never round-trips through the config form.
 - **No cookie `Secure` flag** (server is plain HTTP); the transport is assumed protected by Tailscale/LAN. CORS is closed (same-origin UI) and the cookie is `SameSite=Lax` → CSRF-safe. Do **not** port-forward 8080 to the public internet.
+
+### Network binding (`config.json → setup_bind`)
+
+Controls which interface the setup/editor server listens on (`setup_server.start()` → `_resolve_bind()`). Set via the **Security** tab.
+- `"all"` (default) → `0.0.0.0` — LAN + Tailscale.
+- `"tailscale"` → the node's Tailscale IP only (via `tailscale ip -4`, or scanning interfaces for the `100.64.0.0/10` CGNAT range). The setup and `/editor/work` pages are then **not** served on the local LAN.
+- `"localhost"` → `127.0.0.1`; `"<ip>"` → explicit address.
+- **Fail-safe**: `tailscale` mode with no Tailscale address found (or a bind error) falls back to `127.0.0.1`, never to LAN-wide `0.0.0.0`.
+- Changing it saves to config and rebinds on the service restart (`POST /api/config` → `config_saved`). Switching to `tailscale` while on LAN drops the current connection — reconnect at the Pi's Tailscale address. `start()` returns the bound IP (concrete bind) for the on-screen setup URL.
 - Layout editor at `/editor/work` — saves to `work_layout.json`
 - **Screenshot of the live display** is on the **Layout tab** — button hits `/api/screenshot`
 - **Tab groups**: the UI is split into three groups via a segmented control — **Setup** (wifi, location, addresses, keys, calendar, spotify, hardware), **Settings** (display, intervals/Schedule, keywords, custom-images, security), and **Layout** (editor link + screenshot). See "Adding a new tab" below.

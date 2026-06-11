@@ -588,7 +588,17 @@
     </div>
     <div class="section">
       <div class="section-title">Network exposure</div>
-      <p class="hint">This server listens on all interfaces (port 8080). Reach it over Tailscale or a trusted LAN only — don't port-forward it to the public internet. The password is your last line of defense if the network is reachable.</p>
+      <div class="field">
+        <label>Where this setup page is reachable</label>
+        <select id="sec-bind">
+          <option value="all">All interfaces — LAN + Tailscale</option>
+          <option value="tailscale">Tailscale only (not on local Wi-Fi/LAN)</option>
+          <option value="localhost">This device only</option>
+        </select>
+        <p class="hint">"Tailscale only" stops the setup and layout-editor pages from being served on your local network — they're then reachable solely over your Tailscale tailnet. Don't port-forward port 8080 to the public internet regardless.</p>
+      </div>
+      <button class="btn btn-primary" id="sec-bind-save">Apply network setting</button>
+      <p class="hint" style="margin-top:10px"><strong>Heads up:</strong> applying this restarts the service. If you switch to "Tailscale only" while connected over local Wi-Fi, this page will stop responding — reopen it at your Pi's Tailscale address.</p>
     </div>
   </div>
 
@@ -985,6 +995,7 @@ function populateForm(cfg) {
   $('commute-weekdays').checked = cfg.commute?.weekdays_only !== false;
 
   $('setup-port').value = cfg.setup_port || 8080;
+  $('sec-bind').value   = cfg.setup_bind || 'all';
 
   $('spotify-client-id').value     = cfg.spotify?.client_id     || '';
   setSecretField('spotify-client-secret', cfg.spotify?.client_secret);
@@ -1063,6 +1074,7 @@ function collectForm() {
       all_day_days: [...document.querySelectorAll('.sleep-allday:checked')].map(cb => parseInt(cb.value)),
     },
     setup_port: +$('setup-port').value,
+    setup_bind: $('sec-bind').value,
   };
 }
 
@@ -1293,6 +1305,32 @@ $('sec-save').addEventListener('click', async () => {
 $('sec-logout').addEventListener('click', async () => {
   try { await fetch('/api/auth/logout', {method: 'POST'}); } catch (e) {}
   location.href = '/login';
+});
+
+$('sec-bind-save').addEventListener('click', async () => {
+  const mode = $('sec-bind').value;
+  if (mode !== 'all' &&
+      !confirm('This restarts the setup service. If you are connected over local Wi-Fi and choose Tailscale-only, this page will stop responding here — you\'ll need to reopen it at the Pi\'s Tailscale address. Continue?')) {
+    return;
+  }
+  $('sec-bind-save').disabled = true;
+  try {
+    const r = await fetch('/api/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({setup_bind: mode}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (d.status === 'saved') {
+      _cfg = {..._cfg, setup_bind: mode};
+      toast('Network setting saved ✓' + (d.complete ? ' · restarting…' : ' · applies on next restart'));
+    } else {
+      toast(d.error || 'Could not save', 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    $('sec-bind-save').disabled = false;
+  }
 });
 
 loadConfig();

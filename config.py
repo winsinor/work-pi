@@ -70,6 +70,12 @@ DEFAULTS: dict = {
     },
     "display_cache_s": 60,
     "setup_port": 8080,
+    # Which network interface the setup/editor web server listens on:
+    #   "all"       — every interface (LAN + Tailscale)  [default]
+    #   "tailscale" — the node's Tailscale IP only (not reachable from the LAN)
+    #   "localhost" — on-device only
+    #   "<ip>"      — bind to an explicit address
+    "setup_bind": "all",
     # Web setup-server authentication. Empty password_hash = no password set yet
     # (the server stays open for first-run setup until a password is configured).
     # Managed only via the dedicated /api/auth/* endpoints, never the config form.
