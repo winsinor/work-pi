@@ -75,7 +75,7 @@ sudo evtest /dev/input/event4
 | `setup/index.html` | Setup web UI (Wi-Fi, location, API keys, Spotify, display, GPIO, etc.) |
 | `editor/work/` | Layout editor (HTML + JS + CSS) |
 | `deploy` | One-liner update script: git pull + rsync + restart |
-| `auto-deploy.sh` | Auto-deploy script run by systemd timer every 2 min |
+| `auto-deploy.sh` | Optional auto-deploy script (systemd timer, every 2 min). **Disabled by default** — its `git fetch` rewrites `.git` each run; use `deploy` instead, or enable `auto-deploy.timer` |
 | `harden.sh` | SD-card / power-loss hardening (swap→zram, volatile logs, masked timers, gpu_mem, noatime) — idempotent, reversible, `--dry-run` |
 | `config.json` | Operational config — **gitignored, never commit** |
 | `work_layout.json` | Visual layout overrides — committed, edited via `/editor/work` |

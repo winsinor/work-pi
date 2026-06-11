@@ -204,8 +204,12 @@ sed "s|__REPO__|$SCRIPT_DIR|g" "$SCRIPT_DIR/auto-deploy.service" \
 cp "$SCRIPT_DIR/auto-deploy.timer" /etc/systemd/system/auto-deploy.timer
 
 systemctl daemon-reload
-systemctl enable --now auto-deploy.timer
-green "    auto-deploy.timer active — pulls every 2 min, restarts only on new commits"
+# auto-deploy is installed but NOT enabled by default — its 2-min `git fetch`
+# rewrites .git on every run, which is unwanted on read-only / write-minimised
+# SD setups. Deploy on demand with `deploy`, or enable it explicitly:
+#   sudo systemctl enable --now auto-deploy.timer
+systemctl disable auto-deploy.timer 2>/dev/null || true
+info "    auto-deploy.timer installed but disabled — run 'deploy' to update, or enable the timer to auto-pull"
 
 # ── done ───────────────────────────────────────────────────────────────────────
 echo ""
