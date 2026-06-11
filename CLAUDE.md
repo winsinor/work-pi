@@ -141,9 +141,22 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 
 - **Always running**, even in normal display mode — allows reconfiguration without restart
 - Main config endpoint: `POST /api/config` — saves `config.json`, runs `timedatectl set-timezone`, signals `config_saved` event which triggers `os.execv` restart
+
+### Setup-page authentication
+
+The server binds `0.0.0.0` and exposes config + WiFi/system control, so it's password-gated (`setup_server.py`, **Security** tab in Settings). Auth state lives in `config.json → "auth"`.
+
+- **Password**: PBKDF2-HMAC-SHA256 (`salt` + `iterations`, default 200k), verified with `hmac.compare_digest`. Only the digest is stored.
+- **Sessions**: stateless signed cookie `wp_session = "<expiry>.<hmac>"`, HMAC'd with `auth.session_secret`, valid `auth.session_days` (default 7). No server-side session store.
+- **Rotation kills sessions**: `session_secret` is regenerated on every password change, so changing the password invalidates all existing cookies (the changer gets a fresh one).
+- **Gating**: `SetupHandler._gate()` runs first in both `do_GET`/`do_POST`. Public paths only: `/login`, `/api/auth/login`, `/api/auth/status`, `/spotify/callback`. Unauthed → 302 `/login` for pages, 401 for `/api`,`/work`,`/spotify`.
+- **Bootstrap**: if `password_hash` is empty the server stays **open** (so first-run setup works) and the Security tab shows a yellow "no password" warning. `set-password` needs the current password once one is set.
+- **Endpoints**: `POST /api/auth/login` (sets cookie, per-IP throttle 8/5min), `POST /api/auth/logout`, `POST /api/auth/set-password {current,new}` (min 8 chars), `GET /api/auth/status`.
+- The `auth` section is **stripped from `GET /api/config`** and **dropped from `POST /api/config`** — it never round-trips through the config form.
+- **No cookie `Secure` flag** (server is plain HTTP); the transport is assumed protected by Tailscale/LAN. CORS is closed (same-origin UI) and the cookie is `SameSite=Lax` → CSRF-safe. Do **not** port-forward 8080 to the public internet.
 - Layout editor at `/editor/work` — saves to `work_layout.json`
 - **Screenshot of the live display** is on the **Layout tab** — button hits `/api/screenshot`
-- **Tab groups**: the UI is split into three groups via a segmented control — **Setup** (wifi, location, addresses, keys, calendar, spotify, hardware), **Settings** (display, intervals/Schedule, keywords, custom-images), and **Layout** (editor link + screenshot). See "Adding a new tab" below.
+- **Tab groups**: the UI is split into three groups via a segmented control — **Setup** (wifi, location, addresses, keys, calendar, spotify, hardware), **Settings** (display, intervals/Schedule, keywords, custom-images, security), and **Layout** (editor link + screenshot). See "Adding a new tab" below.
 - Location "Look up" button geocodes via Nominatim then auto-detects timezone via `timeapi.io` — populates lat, lon, and timezone dropdown automatically
 - **Spotify tab** — OAuth connect flow; see Spotify section below
 - **Custom images**: `POST /api/upload-image` (multipart) and `POST /api/delete-image` (JSON `{filename}`) — delete button wired in the UI; path-traversal protected

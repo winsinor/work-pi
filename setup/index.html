@@ -77,6 +77,7 @@
   .badge-green { background: #0e3a1a; color: var(--green); }
   .badge-yellow { background: #2d2000; color: var(--yellow); }
   .badge-red { background: #3d0c0a; color: var(--red); }
+  .badge-grey { background: #262626; color: #aaa; }
 
   .tags-wrap { display: flex; flex-wrap: wrap; gap: 6px; padding: 7px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; min-height: 38px; cursor: text; }
   .tags-wrap:focus-within { border-color: var(--accent); }
@@ -163,6 +164,7 @@
     <div class="tab"                 data-tab="intervals"     data-group="settings">Schedule</div>
     <div class="tab"                 data-tab="keywords"      data-group="settings">Keywords</div>
     <div class="tab"                 data-tab="custom-images" data-group="settings">Images</div>
+    <div class="tab"                 data-tab="security"      data-group="settings">Security</div>
     <div class="tab"                 data-tab="layout"        data-group="layout">Layout</div>
   </div>
 
@@ -559,6 +561,37 @@
     </div>
   </div>
 
+  <!-- ── Security ── -->
+  <div class="panel" id="panel-security">
+    <p class="hint" style="margin-bottom:16px">Protect this setup page with a password. The dashboard itself keeps running normally — this only gates the configuration web UI.</p>
+    <div class="section">
+      <div class="section-title">Setup Password</div>
+      <div id="sec-status" class="badge badge-grey" style="margin-bottom:12px">Checking…</div>
+      <div class="field" id="sec-current-field" style="display:none">
+        <label>Current password</label>
+        <input type="password" id="sec-current" autocomplete="current-password" placeholder="Current password">
+      </div>
+      <div class="field">
+        <label id="sec-new-label">New password</label>
+        <input type="password" id="sec-new" autocomplete="new-password" placeholder="At least 8 characters">
+      </div>
+      <div class="field">
+        <label>Confirm password</label>
+        <input type="password" id="sec-confirm" autocomplete="new-password" placeholder="Re-enter password">
+      </div>
+      <button class="btn btn-primary" id="sec-save">Save password</button>
+      <p class="hint" style="margin-top:14px">After signing in you stay logged in on this device for up to a week. Changing the password signs out all other devices.</p>
+    </div>
+    <div class="section">
+      <div class="section-title">Session</div>
+      <button class="btn" id="sec-logout">Sign out of this device</button>
+    </div>
+    <div class="section">
+      <div class="section-title">Network exposure</div>
+      <p class="hint">This server listens on all interfaces (port 8080). Reach it over Tailscale or a trusted LAN only — don't port-forward it to the public internet. The password is your last line of defense if the network is reachable.</p>
+    </div>
+  </div>
+
   <!-- ── Layout ── -->
   <div class="panel" id="panel-layout">
     <div class="section">
@@ -661,7 +694,7 @@ function toast(msg, type='success') {
 // Tabs are grouped into one-time Setup, frequently-tweaked Settings, and Layout.
 const GROUPS = {
   setup:    ['wifi','location','addresses','keys','calendar','spotify','hardware'],
-  settings: ['display','intervals','keywords','custom-images'],
+  settings: ['display','intervals','keywords','custom-images','security'],
   layout:   ['layout'],
 };
 let _group  = 'setup';
@@ -720,6 +753,7 @@ function goTo(idx, animate = true) {
 
   if (name === 'custom-images') loadCustomImages();
   if (name === 'spotify') { loadSpotifyStatus(); loadSpotifyRedirectUri(); }
+  if (name === 'security') loadAuthStatus();
 }
 
 document.querySelectorAll('.group-tab').forEach(g => {
@@ -1202,6 +1236,63 @@ $('btn-upload-image').addEventListener('click', async () => {
   } finally {
     $('btn-upload-image').disabled = false;
   }
+});
+
+// ── Setup-page authentication ──────────────────────────────────────────────
+let _passwordSet = false;
+async function loadAuthStatus() {
+  const badge = $('sec-status');
+  try {
+    const r = await fetch('/api/auth/status');
+    const d = await r.json();
+    _passwordSet = !!d.password_set;
+    $('sec-current-field').style.display = _passwordSet ? '' : 'none';
+    $('sec-new-label').textContent = _passwordSet ? 'New password' : 'Create a password';
+    $('sec-save').textContent = _passwordSet ? 'Change password' : 'Set password';
+    $('sec-logout').style.display = _passwordSet ? '' : 'none';
+    if (_passwordSet) {
+      badge.textContent = 'Password protection is ON';
+      badge.className = 'badge badge-green';
+    } else {
+      badge.textContent = 'No password set — this page is open to anyone on the network';
+      badge.className = 'badge badge-yellow';
+    }
+  } catch (e) {
+    badge.textContent = 'Could not load status';
+    badge.className = 'badge badge-grey';
+  }
+}
+
+$('sec-save').addEventListener('click', async () => {
+  const cur = $('sec-current').value;
+  const nw  = $('sec-new').value;
+  const cf  = $('sec-confirm').value;
+  if (nw.length < 8) { toast('Password must be at least 8 characters', 'error'); return; }
+  if (nw !== cf)     { toast('Passwords do not match', 'error'); return; }
+  $('sec-save').disabled = true;
+  try {
+    const r = await fetch('/api/auth/set-password', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({current: cur, new: nw}),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      toast('Password saved ✓');
+      $('sec-current').value = $('sec-new').value = $('sec-confirm').value = '';
+      loadAuthStatus();
+    } else {
+      toast(d.error || 'Could not save password', 'error');
+    }
+  } catch (e) {
+    toast('Error: ' + e.message, 'error');
+  } finally {
+    $('sec-save').disabled = false;
+  }
+});
+
+$('sec-logout').addEventListener('click', async () => {
+  try { await fetch('/api/auth/logout', {method: 'POST'}); } catch (e) {}
+  location.href = '/login';
 });
 
 loadConfig();

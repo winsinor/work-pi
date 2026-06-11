@@ -70,6 +70,16 @@ DEFAULTS: dict = {
     },
     "display_cache_s": 60,
     "setup_port": 8080,
+    # Web setup-server authentication. Empty password_hash = no password set yet
+    # (the server stays open for first-run setup until a password is configured).
+    # Managed only via the dedicated /api/auth/* endpoints, never the config form.
+    "auth": {
+        "password_hash": "",      # PBKDF2-HMAC-SHA256 hex digest
+        "salt": "",               # hex
+        "iterations": 200000,
+        "session_secret": "",     # HMAC key for signed session cookies (rotates on pw change)
+        "session_days": 7,        # how long a login stays valid
+    },
     "route_labels": [
         "Work → Home",
         "Work → Waypoint → Home",
