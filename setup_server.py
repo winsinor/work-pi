@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import copy
 import email.parser
+import hashlib
+import hmac
 import io
 import json
 import mimetypes
 import os
+import secrets
 import socket
 import subprocess
 import tempfile
 import threading
+import time
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -59,6 +63,149 @@ def _strip_secret_sentinels(incoming: dict) -> None:
             sec.pop(key, None)
 
 
+# ── Authentication ────────────────────────────────────────────────────────────────────
+#
+# The setup server binds to 0.0.0.0 and exposes config, WiFi control and other
+# system endpoints, so it must not be an open door on a Tailscale/LAN network.
+# A single shared password gates everything; a successful login issues a signed,
+# stateless session cookie valid for `auth.session_days` (default 7). The cookie
+# is HMAC-signed with `auth.session_secret`, which is rotated whenever the
+# password changes — so changing the password invalidates every existing session.
+#
+# No Secure flag is set on the cookie because the server speaks plain HTTP; the
+# transport is expected to be protected by Tailscale (WireGuard) or a trusted LAN.
+
+_SESSION_COOKIE = "wp_session"
+_PBKDF2_ITERS = 200_000
+_MIN_PASSWORD_LEN = 8
+
+# Endpoints reachable without a valid session (login flow + OAuth callback, which
+# is hit by a cross-origin redirect from Spotify and carries a single-use code).
+_PUBLIC_PATHS = frozenset({
+    "/login", "/api/auth/login", "/api/auth/status", "/spotify/callback",
+})
+
+# Basic per-IP brute-force throttle for the login endpoint.
+_login_lock = threading.Lock()
+_login_fails: dict = {}            # ip -> [count, window_start_ts]
+_LOGIN_MAX = 8
+_LOGIN_WINDOW = 300               # seconds
+
+
+def _hash_password(password: str, salt_hex: str, iters: int) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode(), bytes.fromhex(salt_hex), iters).hex()
+
+
+def _password_set(cfg: dict) -> bool:
+    a = cfg.get("auth") or {}
+    return bool(a.get("password_hash") and a.get("salt"))
+
+
+def _verify_password(cfg: dict, password: str) -> bool:
+    a = cfg.get("auth") or {}
+    if not _password_set(cfg) or not password:
+        return False
+    try:
+        calc = _hash_password(password, a["salt"], int(a.get("iterations") or _PBKDF2_ITERS))
+    except Exception:
+        return False
+    return hmac.compare_digest(calc, str(a.get("password_hash", "")))
+
+
+def _make_session_token(cfg: dict) -> str:
+    a = cfg.get("auth") or {}
+    secret = str(a.get("session_secret") or "")
+    days = int(a.get("session_days") or 7)
+    exp = int(time.time()) + days * 86400
+    sig = hmac.new(secret.encode(), str(exp).encode(), hashlib.sha256).hexdigest()
+    return f"{exp}.{sig}"
+
+
+def _valid_session_token(cfg: dict, token: str) -> bool:
+    a = cfg.get("auth") or {}
+    secret = str(a.get("session_secret") or "")
+    if not secret or not token:
+        return False
+    try:
+        exp_s, sig = token.split(".", 1)
+        exp = int(exp_s)
+    except (ValueError, AttributeError):
+        return False
+    if exp < time.time():
+        return False
+    good = hmac.new(secret.encode(), exp_s.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(good, sig)
+
+
+def _session_max_age(cfg: dict) -> int:
+    return int((cfg.get("auth") or {}).get("session_days") or 7) * 86400
+
+
+def _login_allowed(ip: str) -> bool:
+    now = time.time()
+    with _login_lock:
+        rec = _login_fails.get(ip)
+        if not rec or now - rec[1] > _LOGIN_WINDOW:
+            return True
+        return rec[0] < _LOGIN_MAX
+
+
+def _login_record_fail(ip: str) -> None:
+    now = time.time()
+    with _login_lock:
+        rec = _login_fails.get(ip)
+        if not rec or now - rec[1] > _LOGIN_WINDOW:
+            _login_fails[ip] = [1, now]
+        else:
+            rec[0] += 1
+
+
+def _login_reset(ip: str) -> None:
+    with _login_lock:
+        _login_fails.pop(ip, None)
+
+
+_LOGIN_PAGE = """<!doctype html><html><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Sign in · work-pi</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;
+min-height:100vh;align-items:center;justify-content:center;margin:0}
+form{background:#1b1b1b;padding:32px;border-radius:14px;width:300px;box-shadow:0 8px 40px #000}
+h2{color:#1db954;margin:0 0 18px}
+input{width:100%;box-sizing:border-box;padding:11px;margin:6px 0 14px;border-radius:8px;
+border:1px solid #333;background:#0e0e0e;color:#eee;font-size:15px}
+button{width:100%;padding:12px;border:0;border-radius:8px;background:#1db954;color:#000;
+font-weight:600;font-size:15px;cursor:pointer}
+.err{color:#ff6b6b;font-size:13px;min-height:18px;margin-top:6px}
+.hint{color:#888;font-size:12px;margin-top:14px;text-align:center}
+</style></head><body>
+<form id=f onsubmit="return false">
+<h2>work-pi setup</h2>
+<input type=password id=pw placeholder="Password" autofocus autocomplete=current-password>
+<button id=go>Sign in</button>
+<div class=err id=err></div>
+<div class=hint>Stays signed in for up to a week on this device.</div>
+</form>
+<script>
+const go=document.getElementById('go'),pw=document.getElementById('pw'),err=document.getElementById('err');
+async function submit(){
+  err.textContent='';go.disabled=true;
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:pw.value})});
+    if(r.ok){location.href='/';return;}
+    const d=await r.json().catch(()=>({}));
+    err.textContent=d.error||(r.status===429?'Too many attempts. Wait a few minutes.':'Incorrect password');
+  }catch(e){err.textContent='Network error';}
+  go.disabled=false;pw.select();
+}
+go.addEventListener('click',submit);
+pw.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
+</script></body></html>"""
+
+
 def _get_local_ip() -> str:
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -71,6 +218,69 @@ def _get_local_ip() -> str:
             s.close()
         except Exception:
             pass
+
+
+def _in_cgnat(ip: str) -> bool:
+    """True if ip is in 100.64.0.0/10 — the CGNAT range Tailscale assigns."""
+    try:
+        a, b = (int(x) for x in ip.split(".")[:2])
+    except (ValueError, IndexError):
+        return False
+    return a == 100 and 64 <= b <= 127
+
+
+def _tailscale_ip() -> str | None:
+    """Best-effort lookup of this node's Tailscale IPv4, or None if not up."""
+    # Canonical source: the tailscale CLI.
+    try:
+        r = subprocess.run(["tailscale", "ip", "-4"],
+                           capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            ip = line.strip()
+            if _in_cgnat(ip):
+                return ip
+    except Exception:
+        pass
+    # Fallback: scan interface addresses for the CGNAT range (covers setups
+    # where the CLI isn't on PATH but the tailscale0 interface is up).
+    try:
+        r = subprocess.run(["ip", "-4", "-o", "addr", "show"],
+                           capture_output=True, text=True, timeout=5)
+        for line in r.stdout.splitlines():
+            parts = line.split()
+            if "inet" in parts:
+                ip = parts[parts.index("inet") + 1].split("/")[0]
+                if _in_cgnat(ip):
+                    return ip
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_bind(mode: str) -> tuple:
+    """Map a setup_bind setting to (host, human_description).
+
+    'all'       → 0.0.0.0   (LAN + Tailscale + everything; original behaviour)
+    'tailscale' → the node's Tailscale IP only (not reachable from the LAN)
+    'localhost' → 127.0.0.1 (on-device only)
+    <ip>        → that exact address
+
+    'tailscale' fails safe: if no Tailscale address is found it binds to
+    localhost rather than silently falling back to LAN-wide exposure.
+    """
+    m = (mode or "all").strip().lower()
+    if m in ("", "all", "0.0.0.0", "any"):
+        return "0.0.0.0", "all interfaces (LAN + Tailscale)"
+    if m in ("localhost", "loopback", "127.0.0.1"):
+        return "127.0.0.1", "localhost only"
+    if m == "tailscale":
+        ip = _tailscale_ip()
+        if ip:
+            return ip, f"Tailscale only ({ip})"
+        print("[setup] WARNING: setup_bind=tailscale but no Tailscale IP found; "
+              "binding to localhost to avoid exposing the LAN.")
+        return "127.0.0.1", "Tailscale unavailable — localhost only"
+    return mode, f"custom address ({mode})"
 
 
 # ── WiFi helpers (nmcli) ──────────────────────────────────────────────────────────────
@@ -344,20 +554,68 @@ class SetupHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print(f"[setup] {self.address_string()} {fmt % args}")
 
-    def _send_json(self, data: dict, status: int = 200):
+    def _send_json(self, data: dict, status: int = 200, set_cookie: str = None):
         body = json.dumps(data).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        if set_cookie:
+            self.send_header("Set-Cookie", set_cookie)
         self.end_headers()
         self.wfile.write(body)
+
+    # ── auth helpers ──────────────────────────────────────────────────────────
+    def _cookies(self) -> dict:
+        jar = {}
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            if "=" in part:
+                k, v = part.strip().split("=", 1)
+                jar[k] = v
+        return jar
+
+    def _is_authed(self, cfg: dict) -> bool:
+        # No password configured yet → leave the server open so first-run setup
+        # (including setting the password) is possible.
+        if not _password_set(cfg):
+            return True
+        return _valid_session_token(cfg, self._cookies().get(_SESSION_COOKIE, ""))
+
+    def _gate(self, path: str) -> bool:
+        """Return True if the request may proceed; otherwise emit a 401/redirect."""
+        if path in _PUBLIC_PATHS:
+            return True
+        if self._is_authed(cfg_module.load()):
+            return True
+        # API/asset calls get a clean 401; browser page loads get redirected.
+        if path.startswith("/api/") or path.startswith("/work/") or path.startswith("/spotify/"):
+            self._send_json({"error": "auth required"}, 401)
+        else:
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        return False
+
+    def _session_cookie(self, cfg: dict) -> str:
+        return (f"{_SESSION_COOKIE}={_make_session_token(cfg)}; HttpOnly; "
+                f"SameSite=Lax; Path=/; Max-Age={_session_max_age(cfg)}")
 
     def _send_html_str(self, html: str, status: int = 200):
         body = f"<!doctype html><html><head><meta charset=utf-8><style>body{{font-family:sans-serif;padding:40px;background:#111;color:#eee}}h2{{color:#1db954}}</style></head><body>{html}</body></html>".encode()
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _send_html_str_raw(self, html: str, status: int = 200):
+        body = html.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
@@ -422,12 +680,30 @@ class SetupHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        if not self._gate(path):
+            return
 
-        if path in ("/", "/setup"):
+        if path == "/login":
+            cfg = cfg_module.load()
+            # Nothing to log into until a password exists, and an existing session
+            # shouldn't see the login form — bounce both straight to the app.
+            if not _password_set(cfg) or self._is_authed(cfg):
+                self.send_response(302); self.send_header("Location", "/"); self.end_headers()
+            else:
+                self._send_html_str_raw(_LOGIN_PAGE)
+
+        elif path in ("/", "/setup"):
             self._send_html(_SETUP_HTML)
 
+        elif path == "/api/auth/status":
+            cfg = cfg_module.load()
+            self._send_json({"password_set": _password_set(cfg),
+                             "authed": self._is_authed(cfg)})
+
         elif path == "/api/config":
-            self._send_json(_mask_secrets(cfg_module.load()))
+            cfg = _mask_secrets(cfg_module.load())
+            cfg.pop("auth", None)   # never expose password hash / session secret
+            self._send_json(cfg)
 
         elif path == "/api/wifi/scan":
             self._send_json({"networks": _wifi_scan()})
@@ -629,7 +905,68 @@ class SetupHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = self.path.split("?")[0]
+        if not self._gate(path):
+            return
         body = self._read_body()
+
+        if path == "/api/auth/login":
+            ip = self.client_address[0]
+            if not _login_allowed(ip):
+                self._send_json({"error": "Too many attempts"}, 429)
+                return
+            try:
+                password = json.loads(body or b"{}").get("password", "")
+            except (json.JSONDecodeError, AttributeError):
+                self._send_json({"error": "Invalid JSON"}, 400)
+                return
+            cfg = cfg_module.load()
+            if not _password_set(cfg):
+                self._send_json({"error": "No password configured"}, 400)
+                return
+            if _verify_password(cfg, password):
+                _login_reset(ip)
+                self._send_json({"status": "ok"}, set_cookie=self._session_cookie(cfg))
+            else:
+                _login_record_fail(ip)
+                self._send_json({"error": "Incorrect password"}, 401)
+            return
+
+        elif path == "/api/auth/logout":
+            self._send_json(
+                {"status": "ok"},
+                set_cookie=f"{_SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0")
+            return
+
+        elif path == "/api/auth/set-password":
+            try:
+                data = json.loads(body or b"{}")
+            except json.JSONDecodeError:
+                self._send_json({"error": "Invalid JSON"}, 400)
+                return
+            new = str(data.get("new", ""))
+            current = str(data.get("current", ""))
+            cfg = cfg_module.load()
+            # Changing an existing password requires the current one (a stolen
+            # session alone shouldn't be enough to lock the owner out).
+            if _password_set(cfg) and not _verify_password(cfg, current):
+                self._send_json({"error": "Current password is incorrect"}, 403)
+                return
+            if len(new) < _MIN_PASSWORD_LEN:
+                self._send_json(
+                    {"error": f"Password must be at least {_MIN_PASSWORD_LEN} characters"}, 400)
+                return
+            salt = secrets.token_hex(16)
+            cfg.setdefault("auth", {})
+            cfg["auth"]["salt"] = salt
+            cfg["auth"]["iterations"] = _PBKDF2_ITERS
+            cfg["auth"]["password_hash"] = _hash_password(new, salt, _PBKDF2_ITERS)
+            # Rotate the signing secret so all previously issued sessions are killed.
+            cfg["auth"]["session_secret"] = secrets.token_hex(32)
+            cfg["auth"].setdefault("session_days", 7)
+            cfg_module.save(cfg)
+            # Re-issue a fresh cookie so the caller stays signed in.
+            self._send_json({"status": "ok"}, set_cookie=self._session_cookie(cfg))
+            return
 
         if path == "/api/config":
             try:
@@ -638,6 +975,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                 self._send_json({"error": "Invalid JSON"}, 400)
                 return
 
+            incoming.pop("auth", None)   # auth is managed only via /api/auth/*
             _strip_secret_sentinels(incoming)
             current = cfg_module.load()
             for k, v in incoming.items():
@@ -844,10 +1182,10 @@ class SetupHandler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_OPTIONS(self):
+        # The setup UI is served same-origin, so no cross-origin access is granted.
+        # Combined with SameSite=Lax session cookies this blocks CSRF from other sites.
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Allow", "GET, POST, OPTIONS")
         self.end_headers()
 
 
@@ -857,20 +1195,35 @@ _server: HTTPServer | None = None
 
 
 def start(port: int) -> str:
-    """Start the setup HTTP server in a daemon thread. Returns the local IP."""
+    """Start the setup HTTP server in a daemon thread.
+
+    Binds according to config `setup_bind` (default 'all'). Returns the address
+    to advertise — the bound IP for a specific bind, else the LAN IP.
+    """
     global _server
     if _server is not None:
         return _get_local_ip()
+    mode = (cfg_module.load().get("setup_bind") or "all")
+    host, desc = _resolve_bind(mode)
     HTTPServer.allow_reuse_address = True
-    _server = HTTPServer(("0.0.0.0", port), SetupHandler)
+    try:
+        _server = HTTPServer((host, port), SetupHandler)
+    except OSError as exc:
+        # e.g. the chosen address vanished (Tailscale dropped) — fail safe to
+        # localhost rather than the whole LAN.
+        print(f"[setup] could not bind {host}:{port} ({exc}); using 127.0.0.1")
+        host, desc = "127.0.0.1", "localhost only (bind fallback)"
+        _server = HTTPServer((host, port), SetupHandler)
 
     def _run():
-        print(f"[setup] listening on port {port}")
+        print(f"[setup] listening on {host}:{port} — {desc}")
         _server.serve_forever()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
-    return _get_local_ip()
+    # Advertise the actual bound IP when it's a concrete address; for 0.0.0.0
+    # fall back to the routable LAN IP so the on-screen URL is reachable.
+    return host if host not in ("0.0.0.0",) else _get_local_ip()
 
 
 def stop():

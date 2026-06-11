@@ -73,6 +73,14 @@
   },
   "display_cache_s": 60,
   "setup_port": 8080,
+  "setup_bind": "all",
+  "auth": {
+    "password_hash": "",
+    "salt": "",
+    "iterations": 200000,
+    "session_secret": "",
+    "session_days": 7
+  },
   "route_labels": [
     "Work → Home",
     "Work → Daycare → Home"
