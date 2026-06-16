@@ -260,10 +260,13 @@ def build_calendar_page(store: DataStore) -> dict | None:
         {"text": countdown, "size": 3, "color": cc},
     ]
     try:
-        start = datetime.fromisoformat(nxt["start_iso"])
-        end   = datetime.fromisoformat(nxt["end_iso"])
-        lines.append({"text": f"{start.strftime('%-I:%M')} - {end.strftime('%-I:%M %p')}",
-                      "size": 1, "color": "white"})
+        if nxt.get("all_day"):
+            lines.append({"text": "All day", "size": 1, "color": "white"})
+        else:
+            start = datetime.fromisoformat(nxt["start_iso"])
+            end   = datetime.fromisoformat(nxt["end_iso"])
+            lines.append({"text": f"{start.strftime('%-I:%M')} - {end.strftime('%-I:%M %p')}",
+                          "size": 1, "color": "white"})
     except Exception:
         pass
 
