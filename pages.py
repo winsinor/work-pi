@@ -226,10 +226,13 @@ def build_calendar_page(store: DataStore) -> dict | None:
         for i, ev in enumerate(future[:2]):
             try:
                 s     = datetime.fromisoformat(ev["start_iso"])
-                e     = datetime.fromisoformat(ev["end_iso"])
                 title = ev.get("title", "Event")
-                label    = "Next" if i == 0 else "Then"
-                time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
+                label = "Next" if i == 0 else "Then"
+                if ev.get("all_day"):
+                    time_str = f"{s.strftime('%a.')} All day"
+                else:
+                    e = datetime.fromisoformat(ev["end_iso"])
+                    time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
                 lines.append({"text": f"{label}: {title}", "color": "white"})
                 lines.append({"text": time_str, "size": 1, "color": "white"})
             except Exception:

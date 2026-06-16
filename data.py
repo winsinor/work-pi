@@ -415,8 +415,11 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
                 continue
             sv = dtstart.dt
             ev = dtend.dt if dtend else sv
-            if not isinstance(sv, datetime):
-                continue
+            all_day = not isinstance(sv, datetime)
+            if all_day:
+                # Bare date → treat as all-day; convert to midnight naive datetime
+                sv = datetime.combine(sv, datetime.min.time())
+                ev = datetime.combine(ev, datetime.min.time()) if isinstance(ev, date) and not isinstance(ev, datetime) else (ev if isinstance(ev, datetime) else datetime.combine(ev, datetime.min.time()))
             if hasattr(sv, "tzinfo") and sv.tzinfo is not None:
                 sv = sv.astimezone(local_tz).replace(tzinfo=None) if local_tz else sv.astimezone().replace(tzinfo=None)
             if hasattr(ev, "tzinfo") and ev.tzinfo is not None:
@@ -430,6 +433,7 @@ def fetch_ics_events(store: DataStore) -> list[dict]:
                 "start_iso": sv.isoformat(),
                 "end_iso":   ev.isoformat(),
                 "location":  location,
+                "all_day":   all_day,
                 "_id":       _event_id({"title": title, "start_iso": sv.isoformat(),
                                         "end_iso": ev.isoformat()}),
             }
