@@ -496,9 +496,9 @@ def build_display(store: DataStore) -> dict:
         return {"pages": pages, "display_mode": mode}
 
     if state == "WFH":
-        return _result([{"_name": "wfh", "title": "Working From Home", "lines": [
+        return {"pages": [{"_name": "wfh", "title": "Working From Home", "lines": [
             {"text": "Working From Home", "size": 3, "color": "white"},
-        ]}], "WFH")
+        ]}], "display_mode": "WFH"}
 
     if state == "OOO":
         ret_str = return_date.strftime("%a %b %-d") if return_date else ""
