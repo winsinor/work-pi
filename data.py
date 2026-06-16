@@ -460,7 +460,7 @@ def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
                         local_tz=None) -> object:
     ooo_kw     = ooo_kw     or []
     holiday_kw = holiday_kw or ["holiday"]
-    for _ in range(14):
+    for _ in range(30):
         if d.weekday() >= 5:
             d += timedelta(days=1)
             continue
@@ -534,21 +534,24 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
             continue
         tl = title.lower()
 
-        if any(k in tl for k in wfh_kw):
-            new_state = "WFH"
-            break
-        if any(k in tl for k in ooo_kw):
-            dtend      = component.get("DTEND")
-            ev         = dtend.dt if dtend else today + timedelta(days=1)
+        # Priority: HOLIDAY > OOO > WFH. Don't break early — a later event in
+        # the ICS file may have higher priority than an already-matched one.
+        if any(k in tl for k in holiday_kw):
+            new_state  = "HOLIDAY"
+            new_title  = title
+            new_return = None
+            break  # nothing can beat HOLIDAY
+        if any(k in tl for k in ooo_kw) and new_state != "HOLIDAY":
+            dtend = component.get("DTEND")
+            ev    = dtend.dt if dtend else today + timedelta(days=1)
             if isinstance(ev, datetime):
+                if hasattr(ev, "tzinfo") and ev.tzinfo:
+                    ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
                 ev = ev.date()
             new_state  = "OOO"
             new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw, local_tz)
-            break
-        if any(k in tl for k in holiday_kw):
-            new_state = "HOLIDAY"
-            new_title = title
-            break
+        elif any(k in tl for k in wfh_kw) and new_state == "NORMAL":
+            new_state = "WFH"
 
     return new_state, new_return, new_title
 

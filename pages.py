@@ -38,7 +38,7 @@ def _cfg_err(name: str, lines: list[dict]) -> dict:
 
 def build_weather_page(store: DataStore) -> dict:
     loc = store.cfg.get("location") or {}
-    if not loc.get("lat") and not loc.get("lon"):
+    if not loc.get("lat") or not loc.get("lon"):
         return _cfg_err("forecast", [
             {"text": "Location not set", "size": 2, "color": "red"},
             {"text": "Add your location", "size": 1, "color": "darkgrey"},
@@ -218,20 +218,25 @@ def build_calendar_page(store: DataStore) -> dict | None:
         future = []
         for ev in events:
             try:
-                s = datetime.fromisoformat(ev["start_iso"])
-                if s > now:
+                e = datetime.fromisoformat(ev["end_iso"])
+                if e > now:
                     future.append(ev)
             except Exception:
                 pass
         for i, ev in enumerate(future[:2]):
             try:
                 s     = datetime.fromisoformat(ev["start_iso"])
+                e     = datetime.fromisoformat(ev["end_iso"])
                 title = ev.get("title", "Event")
                 label = "Next" if i == 0 else "Then"
                 if ev.get("all_day"):
-                    time_str = f"{s.strftime('%a.')} All day"
+                    if s <= now:
+                        # Ongoing multi-day event — show last day (DTEND is exclusive)
+                        last_day = (e - timedelta(days=1)).strftime('%a.')
+                        time_str = f"Through {last_day}"
+                    else:
+                        time_str = f"{s.strftime('%a.')} All day"
                 else:
-                    e = datetime.fromisoformat(ev["end_iso"])
                     time_str = f"{s.strftime('%a. %-I:%M')} - {e.strftime('%-I:%M %p')}"
                 lines.append({"text": f"{label}: {title}", "color": "white"})
                 lines.append({"text": time_str, "size": 1, "color": "white"})
