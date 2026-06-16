@@ -505,13 +505,13 @@ def build_display(store: DataStore) -> dict:
         lines   = [{"text": "Out of Office", "size": 3, "color": "white"}]
         if ret_str:
             lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
-        return _result([{"_name": "ooo", "title": "Out of Office", "lines": lines}], "OOO")
+        return {"pages": [{"_name": "ooo", "title": "Out of Office", "lines": lines}], "display_mode": "OOO"}
 
     if state == "HOLIDAY":
         title_text = event_title or "Holiday"
-        return _result([{"_name": "holiday", "title": "Holiday", "lines": [
+        return {"pages": [{"_name": "holiday", "title": "Holiday", "lines": [
             {"text": title_text, "size": 3, "color": "white"},
-        ]}], "HOLIDAY")
+        ]}], "display_mode": "HOLIDAY"}
 
     tz = store.cfg.get("location", {}).get("timezone")
     layout_pages = get_raw_layout().get("pages", {})
