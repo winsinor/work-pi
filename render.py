@@ -601,8 +601,9 @@ def _render_hourly_grid(draw, items: list, grid_top: int, layout: dict, img=None
     gap     = 4
     total_h = lh + gap + th + gap + rh
     cell_h  = H - grid_top
-    y0      = grid_top + max(4, (cell_h - total_h) // 2)
-    y_tmp   = y0 + lh + gap
+    margin  = max(4, (cell_h - total_h) // 2)
+    y0      = grid_top + margin - 2  # time row raised 2px above the centered block
+    y_tmp   = grid_top + margin + lh + gap
     y_rain  = y_tmp + th + gap
 
     for i, item in enumerate(items[:cols]):
