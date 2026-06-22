@@ -1,6 +1,6 @@
 # CLAUDE.md — work-pi dashboard
 
-Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches weather, commute times, calendar events, AQI, alerts, and Spotify now-playing; renders pages as RGB565 frames written directly to `/dev/fb1`.
+Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches weather, commute times, calendar events, AQI, and Spotify now-playing; renders pages as RGB565 frames written directly to `/dev/fb1`.
 
 ## Hardware
 
@@ -70,7 +70,7 @@ sudo evtest /dev/input/event4
 | `work_display.py` | Main loop: fetch → render → write to fb |
 | `render.py` | PIL rendering, `load_layout()`, `render_page_rgb565()`, `_img_to_rgb565()`, `solid_frame()` |
 | `pages.py` | Page data builders (`build_display()`, `build_spotify_page()`, etc.) |
-| `data.py` | All data fetchers (weather, commute, calendar, AQI, alerts, Spotify) + `DataStore` + `_Cache` |
+| `data.py` | All data fetchers (weather, commute, calendar, AQI, Spotify) + `DataStore` + `_Cache` |
 | `stats.py` | `StatsMonitor` + `render_stats_rgb565()` — bitmap-font stats overlay |
 | `touch.py` | evdev touch reader — unbuffered, dual-axis coord capture |
 | `setup_server.py` | HTTP config server (port 8080) + layout editor backend + Spotify OAuth |
@@ -90,7 +90,7 @@ sudo evtest /dev/input/event4
 ```
 work_display.py
   ├── _fetch_gate (threading.Event) — cleared while asleep; fetch threads block on it
-  ├── _start_fetch_threads()  — weather/commute/calendar/aqi/alerts/spotify loops (daemon threads)
+  ├── _start_fetch_threads()  — weather/commute/calendar/aqi/spotify loops (daemon threads)
   │     each loop calls _fetch_gate.wait() before every network fetch
   ├── _start_button_threads() — gpiozero K2/K3 wiring
   ├── touch.start_touch()     — evdev touch → nav queue or stats toggle
@@ -297,13 +297,9 @@ Configured via Settings → Display tab.
 }
 ```
 
-**Fetch gate**: `_fetch_gate` is a `threading.Event` in `work_display.py`. All six fetch threads call `_fetch_gate.wait()` at the top of each loop. The main loop clears the gate when entering true sleep (not manually woken) and sets it when awake. No network calls happen while sleeping.
+**Fetch gate**: `_fetch_gate` is a `threading.Event` in `work_display.py`. All five fetch threads call `_fetch_gate.wait()` at the top of each loop. The main loop clears the gate when entering true sleep (not manually woken) and sets it when awake. No network calls happen while sleeping.
 
 **Manual wake**: touch or button press → `_sleep_woke_at = time.time()`. Display stays awake for `wake_minutes`. Fetch gate is re-opened immediately on manual wake.
-
-## Weather alerts
-
-Active NWS alerts render as a full-width red banner strip (18px) just below the page header, right-aligned text. Fetched via `api.weather.gov/alerts/active`. Alert text stored in `page["alert_banner"]` — not as a line in `page["lines"]`.
 
 ## Stale-data indicator
 
@@ -334,10 +330,10 @@ Both paths have a numpy fast path + a PIL fallback.
 - Line positions stored in `work_layout.json → line_positions[page_name][index]`
 - `setAt()` in app.js pads arrays with `{}` when setting out-of-bounds indices — prevents sparse arrays → JSON null → Python None → `.get()` crash
 - `render.py` normalizes positions on read: `[(p if isinstance(p, dict) else {}) for p in positions]`
-- Forecast page has "Preview state" dropdown: Normal / Alert banner / Stale data
+- Forecast page has "Preview state" dropdown: Normal / Stale data
 - Calendar page has "No upcoming events view" toggle for the empty-state preview
 
-**Demo pages** for preview (`setup_server.py → _DEMO_PAGES`): `forecast`, `forecast_alert`, `forecast_stale`, `calendar`, `calendar_empty`, `commute`, `wfh`, `ooo`, `holiday`. Add new page variants here when adding features.
+**Demo pages** for preview (`setup_server.py → _DEMO_PAGES`): `forecast`, `forecast_stale`, `calendar`, `calendar_empty`, `commute`, `wfh`, `ooo`, `holiday`. Add new page variants here when adding features.
 
 **Adding a new tab to setup UI**: three edits, all required —
 1. add a `<div class="tab" data-tab="name" data-group="setup|settings|layout">` to the tabs bar,

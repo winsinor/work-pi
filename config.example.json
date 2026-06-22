@@ -54,9 +54,6 @@
   "aqi": {
     "update_interval_s": 900
   },
-  "alerts": {
-    "update_interval_s": 600
-  },
   "spotify": {
     "client_id":        "",
     "client_secret":    "",

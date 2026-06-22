@@ -25,7 +25,7 @@ const state = {
   playing:   false,
   playTimer: null,
   calendarEmptyView: false,  // toggle empty-state preview on calendar page
-  forecastPreview: "normal", // "normal" | "alert" | "stale"
+  forecastPreview: "normal", // "normal" | "stale"
   lineCenters: {},           // page name -> exact center-Y per line (from render)
 };
 
@@ -451,8 +451,7 @@ function loadPreview() {
 
   let page = state.currentPage === "global" ? "clock" : state.currentPage;
   if (page === "calendar" && state.calendarEmptyView) page = "calendar_empty";
-  if (page === "forecast" && state.forecastPreview === "alert") page = "forecast_alert";
-  else if (page === "forecast" && state.forecastPreview === "stale") page = "forecast_stale";
+  if (page === "forecast" && state.forecastPreview === "stale") page = "forecast_stale";
   const icon  = state.previewIcon ? `&icon=${state.previewIcon}` : "";
   const url   = `/work/preview/${page}?scale=2${icon}`;
   // The line_positions key the editor edits (forecast variants still use "forecast").
@@ -578,7 +577,7 @@ function buildPageProps(name) {
   const L  = state.layout;
   const pg = (L.pages && L.pages[name]) || {};
 
-  // Forecast: preview state selector (normal / alert / stale)
+  // Forecast: preview state selector (normal / stale)
   if (name === "forecast") {
     const sec = document.createElement("div");
     sec.className = "prop-section";
@@ -586,7 +585,7 @@ function buildPageProps(name) {
     row.className = "prop-row";
     row.innerHTML = `<span class="prop-label">Preview state</span>`;
     const sel = document.createElement("select");
-    [["normal","Normal"], ["alert","Alert banner"], ["stale","Stale data"]].forEach(([v, lbl]) => {
+    [["normal","Normal"], ["stale","Stale data"]].forEach(([v, lbl]) => {
       const opt = document.createElement("option");
       opt.value = v; opt.textContent = lbl;
       if (state.forecastPreview === v) opt.selected = true;

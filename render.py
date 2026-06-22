@@ -1295,19 +1295,6 @@ def render_page_pil(page: dict, layout: dict | None = None,
     gh         = layout["grid"]["height"] if grid_items else 0
     grid_top   = H - fh - gh
     content_y0 = hh + (1 if hh > 0 else 0)
-
-    alert_banner = page.get("alert_banner")
-    if alert_banner:
-        BANNER_H = 18
-        b0 = content_y0
-        b1 = b0 + BANNER_H
-        draw.rectangle([0, b0, W, b1], fill=(170, 20, 20))
-        bfont = _get_font(12, layout)
-        btext = f"! {alert_banner}"
-        btw, bth = _text_size(draw, btext, bfont)
-        draw.text((W - btw - 6, b0 + (BANNER_H - bth) // 2), btext,
-                  font=bfont, fill=(255, 210, 210))
-        content_y0 = b1 + 1
     content_h  = grid_top - content_y0
 
     lines      = list(page.get("lines") or [])

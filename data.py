@@ -1,4 +1,4 @@
-"""Data fetching — weather, commute, calendar, AQI, alerts, work state."""
+"""Data fetching — weather, commute, calendar, AQI, work state."""
 from __future__ import annotations
 
 import hashlib
@@ -86,14 +86,12 @@ class DataStore:
         ttl_c   = cfg["commute"]["update_interval_s"]
         ttl_ics = cfg["calendar"]["update_interval_s"]
         ttl_aqi = cfg["aqi"]["update_interval_s"]
-        ttl_alt = cfg["alerts"]["update_interval_s"]
 
         self.weather   = _Cache(ttl_w)
         self.commute   = _Cache(ttl_c)
         self.ics_events = _Cache(ttl_ics)
         self.work_state = _Cache(ttl_ics)
         self.aqi        = _Cache(ttl_aqi)
-        self.alerts     = _Cache(ttl_alt)
         self.spotify    = _Cache(cfg.get("spotify", {}).get("update_interval_s", 10))
         self.display    = _Cache(cfg.get("display_cache_s", 60))
 
@@ -352,35 +350,6 @@ def get_aqi(store: DataStore) -> dict:
         except Exception as exc:
             print(f"[aqi] fetch failed: {exc}")
     return store.aqi.get() or {"aqi": None}
-
-
-# ── Weather alerts ────────────────────────────────────────────────────────────────────
-
-def fetch_alerts(store: DataStore) -> str | None:
-    cfg = store.cfg
-    lat = cfg["location"]["lat"]
-    lon = cfg["location"]["lon"]
-    try:
-        r = requests.get("https://api.weather.gov/alerts/active",
-                         params={"point": f"{lat},{lon}"}, timeout=5)
-        if r.status_code == 200:
-            features = r.json().get("features", [])
-            for f in features:
-                event = f.get("properties", {}).get("event")
-                if event:
-                    return f"! {event}"
-    except Exception:
-        pass
-    return None
-
-
-def get_alerts(store: DataStore) -> str | None:
-    if not store.alerts.fresh():
-        try:
-            store.alerts.set(fetch_alerts(store))
-        except Exception as exc:
-            print(f"[alerts] fetch failed: {exc}")
-    return store.alerts.get()
 
 
 # ── Calendar / ICS ───────────────────────────────────────────────────────────────────

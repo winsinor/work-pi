@@ -65,9 +65,6 @@ DEFAULTS: dict = {
     "aqi": {
         "update_interval_s": 900,
     },
-    "alerts": {
-        "update_interval_s": 600,
-    },
     "display_cache_s": 60,
     "setup_port": 8080,
     # Which network interface the setup/editor web server listens on:

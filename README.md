@@ -431,8 +431,8 @@ networks or if the Pi came up without WiFi.
 
 ### Location tab
 
-Enter the latitude and longitude of your **work location** (used for weather,
-AQI, and NWS alerts).
+Enter the latitude and longitude of your **work location** (used for weather
+and AQI).
 
 - Find your lat/lon at [latlong.net](https://www.latlong.net) — search for your city or office address.
 - Select your timezone from the dropdown.
@@ -468,7 +468,7 @@ restart the service.
 |---|---|
 | **TomTom API key** *(required)* | Free account at [developer.tomtom.com](https://developer.tomtom.com). See [detailed steps](#getting-your-tomtom-api-key). |
 
-Weather, AQI, and NWS alerts use free APIs with no key.
+Weather and AQI use free APIs with no key.
 
 ---
 
@@ -762,7 +762,6 @@ See `config.example.json` for a fully annotated template.
 | `commute.window_end_h` | `18` | Hour to stop showing commute (24h) |
 | `commute.weekdays_only` | `true` | Only show commute page on weekdays |
 | `aqi.update_interval_s` | `900` | AQI refresh interval |
-| `alerts.update_interval_s` | `600` | NWS alerts refresh interval |
 | `route_labels` | `["Work → Home", "Work → Waypoint → Home"]` | Labels for the two commute routes |
 | `wfh_keywords` | `["wfh", "working from home"]` | Calendar event keywords for WFH mode |
 | `ooo_keywords` | `["ooo", "out of office", "pto"]` | Calendar event keywords for OOO mode |
@@ -1269,11 +1268,10 @@ sudo journalctl -u work-dashboard -n 50 --no-pager
 |---|---|---|---|
 | Weather | [Open-Meteo](https://open-meteo.com) | None | Free, no account needed |
 | AQI | [Open-Meteo Air Quality](https://air-quality-api.open-meteo.com) | None | US AQI index, free |
-| NWS Alerts | [api.weather.gov](https://api.weather.gov) | None | US only; no alerts shown outside US |
 | Geocoding | [TomTom Search API](https://developer.tomtom.com/search-api/documentation/geocoding-service/geocode) | API key (free) | Used once at startup per address |
 | Routing | [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation/routing/calculate-route) | API key (free) | Real-time traffic included |
 | Incidents | [TomTom Traffic Incidents](https://developer.tomtom.com/traffic-api/documentation/traffic-incidents/incident-details) | API key (free) | Identifies accident/road work cause |
 | Calendar | Outlook ICS / iCalendar | None (URL) | Any `.ics` webcal URL works |
 
-All weather, AQI, and alert data is fetched from free, no-account APIs.
+All weather and AQI data is fetched from free, no-account APIs.
 The only external account required is TomTom (free tier, no credit card).

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from data import (
     DataStore,
     WMO_DESC, WMO_ICONS,
-    get_weather, get_aqi, get_alerts, get_commute,
+    get_weather, get_aqi, get_commute,
     get_ics_events, get_work_state, get_spotify,
     in_commute_window, later_today_desc, wind_cardinal,
     local_now,
@@ -47,9 +47,6 @@ def build_weather_page(store: DataStore) -> dict:
 
     weather = get_weather(store)
     aqi     = get_aqi(store)
-    # NWS alert banner muted for now — its positioning needs a fix (see todo.md).
-    # The fetch thread still keeps the cache warm, so unmuting is a one-line revert.
-    alert   = None
     lines: list[dict] = []
 
     cur    = weather.get("current", {})
@@ -124,9 +121,6 @@ def build_weather_page(store: DataStore) -> dict:
     }
     if aqi_overlay:
         page["aqi_overlay"] = aqi_overlay
-    if alert:
-        page["alert_banner"] = alert.lstrip("! ")
-    # Alerts are muted, so don't let alert-cache staleness trip the stale border.
     if store.weather.stale():
         page["stale"] = True
     return page

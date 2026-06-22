@@ -240,18 +240,6 @@ def _start_fetch_threads(store: DataStore):
                 print(f"[aqi] {exc}")
                 time.sleep(30)
 
-    def _alerts_loop():
-        from data import fetch_alerts
-        while True:
-            _fetch_gate.wait()
-            _wait_for_spotify_clear()
-            try:
-                store.alerts.set(fetch_alerts(store))
-                time.sleep(cfg["alerts"]["update_interval_s"])
-            except Exception as exc:
-                print(f"[alerts] {exc}")
-                time.sleep(30)
-
     def _spotify_loop():
         from data import fetch_spotify
         interval = cfg.get("spotify", {}).get("update_interval_s", 10)
@@ -278,7 +266,7 @@ def _start_fetch_threads(store: DataStore):
             time.sleep(interval)
 
     for fn in (_weather_loop, _commute_loop, _calendar_loop,
-               _aqi_loop, _alerts_loop, _spotify_loop):
+               _aqi_loop, _spotify_loop):
         threading.Thread(target=fn, daemon=True).start()
 
     print("[fetch] background threads started")
