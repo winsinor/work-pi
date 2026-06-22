@@ -7,6 +7,20 @@ INSTALL_DIR="/home/pi/work-dashboard"
 SERVICE="work-dashboard"
 
 cd "$REPO"
+
+# Back up any layout-editor changes made on the Pi to GitHub *before* pulling,
+# so an incoming update can never clobber them. --chown keeps the repo file
+# owned by pi (install dir runs as root) so later git commands don't choke.
+if [ -f "$INSTALL_DIR/work_layout.json" ]; then
+    sudo rsync -a --chown=pi:pi "$INSTALL_DIR/work_layout.json" "$REPO/work_layout.json"
+    if ! git diff --quiet -- work_layout.json; then
+        echo "==> Backing up work_layout.json changes to GitHub …"
+        git add work_layout.json
+        git commit -m "Auto-backup work_layout.json from Pi before deploy"
+        git push origin main
+    fi
+fi
+
 echo "==> Pulling latest …"
 git pull origin main
 

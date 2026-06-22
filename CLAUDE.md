@@ -21,8 +21,9 @@ Raspberry Pi 1B+ desk dashboard with a 320×240 ILI9341 SPI TFT display. Fetches
 
 **Standard update command (run on Pi after every push):**
 ```bash
-cd /home/pi/work-pi && git pull origin main && sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='__pycache__' /home/pi/work-pi/ /home/pi/work-dashboard/ && sudo systemctl restart work-dashboard
+cd /home/pi/work-pi && git pull origin main && sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' /home/pi/work-pi/ /home/pi/work-dashboard/ && sudo systemctl restart work-dashboard
 ```
+> This raw one-liner excludes `work_layout.json` from the rsync (so it won't clobber layout-editor edits already in the install dir) but does **not** back those edits up to GitHub first. Prefer `deploy` below, which does both.
 
 **Shortcut — `deploy` command:**
 ```bash
@@ -31,6 +32,8 @@ sudo ln -sf /home/pi/work-pi/deploy /usr/local/bin/deploy && sudo chmod +x /home
 # Then just run:
 deploy
 ```
+
+`deploy` also auto-backs-up: before pulling, it copies the install dir's `work_layout.json` (any edits made via `/editor/work`) back into the repo, commits, and pushes to GitHub — so an incoming update can never overwrite layout changes made on the Pi. The forward rsync also excludes `work_layout.json`, and it's only ever seeded into the install dir if missing (first deploy).
 
 > **Note**: `sudo deploy` won't work — sudo's PATH excludes `/usr/local/bin`. Use `deploy` as the `pi` user, or run the full rsync one-liner above.
 
