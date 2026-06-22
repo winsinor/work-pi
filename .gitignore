@@ -1,4 +1,5 @@
 config.json
+work_layout.backup.json
 __pycache__/
 *.pyc
 *.pyo

@@ -8,17 +8,14 @@ SERVICE="work-dashboard"
 
 cd "$REPO"
 
-# Back up any layout-editor changes made on the Pi to GitHub *before* pulling,
-# so an incoming update can never clobber them. --chown keeps the repo file
-# owned by pi (install dir runs as root) so later git commands don't choke.
+BACKUP_FILE="$REPO/work_layout.backup.json"
+
+# Back up any layout-editor changes made on the Pi to a local file on the SD
+# card *before* pulling, so an incoming update can never lose them. Purely
+# local — no git involved, so it can't fail on missing git identity/network.
 if [ -f "$INSTALL_DIR/work_layout.json" ]; then
-    sudo rsync -a --chown=pi:pi "$INSTALL_DIR/work_layout.json" "$REPO/work_layout.json"
-    if ! git diff --quiet -- work_layout.json; then
-        echo "==> Backing up work_layout.json changes to GitHub …"
-        git add work_layout.json
-        git commit -m "Auto-backup work_layout.json from Pi before deploy"
-        git push origin main
-    fi
+    echo "==> Backing up work_layout.json to $BACKUP_FILE …"
+    sudo rsync -a --chown=pi:pi "$INSTALL_DIR/work_layout.json" "$BACKUP_FILE"
 fi
 
 echo "==> Pulling latest …"
