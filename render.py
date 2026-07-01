@@ -5,6 +5,7 @@ import copy
 import io
 import math
 import os
+import threading as _threading
 import time as _time_mod
 
 try:
@@ -35,6 +36,14 @@ except ImportError:
 _BASE = os.path.dirname(os.path.abspath(__file__))
 _ICONS_DIR = os.path.join(_BASE, "icons")
 _LAYOUT_FILE = os.path.join(_BASE, "work_layout.json")
+
+# Serialises page rendering across threads. render_page_pil/render_page_rgb565
+# share mutable module state (_current_scroll_zones, _page_bg_cache,
+# _page_strip_cache, _spotify_render_cache) and are called concurrently by the
+# main display loop, the pre-render thread, and the setup-server preview
+# endpoint — unsynchronised, one page's scroll zones can be baked into
+# another page's cache. RLock: render_page_rgb565 calls render_page_pil.
+_render_lock = _threading.RLock()
 
 
 # ── Layout ────────────────────────────────────────────────────────────────────────
@@ -230,14 +239,15 @@ def get_raw_layout() -> dict:
 
 
 def invalidate_layout_cache() -> None:
-    _layout_cache["raw"]        = None
-    _layout_cache["mtime"]      = 0.0
-    _layout_cache["scaled"]     = None
-    _layout_cache["scaled_key"] = None
-    # Font sizes / positions may have changed — clear derived render caches
-    _page_bg_cache.clear()
-    _page_strip_cache.clear()
-    _spotify_render_cache["key"] = None
+    with _render_lock:
+        _layout_cache["raw"]        = None
+        _layout_cache["mtime"]      = 0.0
+        _layout_cache["scaled"]     = None
+        _layout_cache["scaled_key"] = None
+        # Font sizes / positions may have changed — clear derived render caches
+        _page_bg_cache.clear()
+        _page_strip_cache.clear()
+        _spotify_render_cache["key"] = None
 
 
 # ── Colors ────────────────────────────────────────────────────────────────────────
@@ -653,13 +663,19 @@ def render_custom_image_page(image_path: str, layout: dict) -> "Image.Image":
 
 # ── Spotify renderer ────────────────────────────────────────────────────────────────────
 
-_spotify_art_cache: dict = {}  # url → PIL Image (resized)
+_spotify_art_cache: dict = {}  # (url, size) → PIL Image (resized)
+_art_fail_at: dict = {}        # url → timestamp of last failed fetch
+_ART_RETRY_S = 60.0            # back off this long before retrying a failed URL
 
 
 def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
     if (url, size) in _spotify_art_cache:
         return _spotify_art_cache[(url, size)]
     if not _REQUESTS_OK:
+        return None
+    # Negative cache: without it a failing URL is re-fetched (6 s timeout) on
+    # every render tick, freezing the display loop while the network is down.
+    if _time_mod.time() - _art_fail_at.get(url, 0.0) < _ART_RETRY_S:
         return None
     try:
         r = _requests.get(url, timeout=6)
@@ -669,8 +685,12 @@ def _fetch_album_art(url: str, size: int) -> "Image.Image | None":
         if len(_spotify_art_cache) >= 30:
             _spotify_art_cache.clear()
         _spotify_art_cache[(url, size)] = img
+        _art_fail_at.pop(url, None)
         return img
     except Exception:
+        if len(_art_fail_at) >= 30:
+            _art_fail_at.clear()
+        _art_fail_at[url] = _time_mod.time()
         return None
 
 
@@ -853,6 +873,7 @@ _current_scroll_zones: list = []
 _spotify_render_cache: dict = {
     "key": None,    # (track, artist, album, art_url, playlist, ART_SIZE, W, H)
     "bg_arr": None, # uint16 H×W — complete static frame (title already drawn)
+    "had_art": False,  # frame includes album art (rebuild when art arrives late)
     "BAR_Y": 0, "T_Y": 0, "EDGE": 0,
     "f_time": None, "BG": None, "GREEN": None, "MUTED": None, "DIM": None,
 }
@@ -1165,18 +1186,26 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
         artist  = page.get("artist", "") or ""
         album   = page.get("album",  "") or ""
         art_url = page.get("art_url")
-        art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
-        BG      = _album_bg_color(art_img) if art_img else (25, 20, 20)
 
         playlist  = page.get("playlist", "") or ""
         cache_key = (track, artist, album, art_url, playlist, ART_SIZE, W, H)
         sc = _spotify_render_cache
 
+        # If the cached frame was built while the art fetch was failing and the
+        # art has since arrived (prefetched by the Spotify thread), rebuild it.
+        if (sc["key"] == cache_key and not sc.get("had_art")
+                and art_url and (art_url, ART_SIZE) in _spotify_art_cache):
+            sc["key"] = None
+
         if sc["key"] != cache_key:
+            # Only touch the art cache / network on a rebuild — never per tick
+            art_img = _fetch_album_art(art_url, ART_SIZE) if art_url else None
+            BG      = _album_bg_color(art_img) if art_img else (25, 20, 20)
             img = render_spotify_page(page, layout)
             _, ARTIST_C, _ = _adaptive_text_colors(BG)
             sc.update(
                 key=cache_key, bg_arr=_pil_to_arr(img),
+                had_art=art_img is not None,
                 BAR_Y=H - BAR_ZONE + 6, T_Y=H - BAR_ZONE + 6 + 8, EDGE=EDGE,
                 f_time=_get_font(14, layout),
                 BG=BG, GREEN=(29, 185, 84), MUTED=ARTIST_C, DIM=(51, 51, 51),
@@ -1225,6 +1254,12 @@ def _render_spotify_fast(page: dict, layout: dict) -> "bytes | None":
 
 def render_page_pil(page: dict, layout: dict | None = None,
                     _out: dict | None = None) -> "Image.Image":
+    with _render_lock:
+        return _render_page_pil_locked(page, layout, _out)
+
+
+def _render_page_pil_locked(page: dict, layout: dict | None = None,
+                            _out: dict | None = None) -> "Image.Image":
     global _current_scroll_zones
     _current_scroll_zones = []
 
@@ -1421,15 +1456,22 @@ def render_page_pil(page: dict, layout: dict | None = None,
                             }
                         else:
                             strip_pil = sc["strip_pil"]
-                        # Record zone for bg cache (used by render_page_rgb565 fast path)
+                        # Record zone for bg cache (used by render_page_rgb565 fast path).
+                        # Includes the text so compose can verify the strip cache
+                        # still holds THIS text (another thread may replace it).
                         _current_scroll_zones.append(
-                            (scroll_slot, paste_x, scroll_y, max_w, th_s + 2))
+                            (scroll_slot, text, paste_x, scroll_y, max_w, th_s + 2))
                         # PIL paste for correctness (also used by non-numpy callers)
                         off    = int(offset) % tw_gap
                         crop_w = min(max_w, strip_w - off)
                         if crop_w > 0:
                             img.paste(strip_pil.crop((off, 0, off + crop_w, th_s + 2)),
                                       (paste_x, scroll_y))
+                        # Wrap: continue from the strip start so the marquee never
+                        # blanks at the end of a cycle (matches the numpy path)
+                        if 0 < crop_w < max_w:
+                            img.paste(strip_pil.crop((0, 0, max_w - crop_w, th_s + 2)),
+                                      (paste_x + crop_w, scroll_y))
                 else:
                     n_sub       = 2 if l2 else 1
                     gap2        = 2
@@ -1552,9 +1594,13 @@ def _compose_page_from_cache(page_name: str, page_id: int) -> "bytes | None":
         return None
     try:
         frame = bg_e["bg_arr"].copy()
-        for slot, px, py, pw, ph in bg_e["zones"]:
+        for slot, expect_text, px, py, pw, ph in bg_e["zones"]:
             sc = _page_strip_cache.get(slot)
             if sc is None or sc.get("arr") is None:
+                return None
+            if sc["key"] != expect_text:
+                # Strip was rebuilt for different content (e.g. an editor
+                # preview render) — fall back to a full PIL render.
                 return None
             # Advance scroll state (normally done inside render_page_pil)
             off, needs = _tick_scroll(slot, sc["key"], sc["title_w"], sc["max_w"])
@@ -1580,8 +1626,10 @@ def _build_page_cache(page_name: str, page_id: int,
     try:
         bg_img  = img.copy()
         bg_draw = ImageDraw.Draw(bg_img)
-        for _, px, py, pw, ph in zones:
-            bg_draw.rectangle([px, py, px + pw, py + ph], fill=(0, 0, 0))
+        for _, _, px, py, pw, ph in zones:
+            # PIL rectangle bounds are inclusive — subtract 1 so the blanked
+            # area exactly matches the pw×ph zone the compose path overwrites
+            bg_draw.rectangle([px, py, px + pw - 1, py + ph - 1], fill=(0, 0, 0))
         _page_bg_cache[page_name] = {
             "page_id": page_id,
             "bg_arr":  _pil_to_arr(bg_img),
@@ -1606,6 +1654,12 @@ def _rotate_rgb565(data: bytes) -> bytes:
 def render_page_rgb565(page: dict, layout: dict | None = None,
                        rotate_180: bool = False) -> bytes:
     """Render a page to raw RGB565 bytes for the framebuffer."""
+    with _render_lock:
+        return _render_page_rgb565_locked(page, layout, rotate_180)
+
+
+def _render_page_rgb565_locked(page: dict, layout: dict | None = None,
+                               rotate_180: bool = False) -> bytes:
     page_name = page.get("_name", "")
 
     page_id = id(page)

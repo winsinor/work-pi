@@ -135,8 +135,8 @@ Enable raw event debug logging: set `"debug": true` in the `"touch"` section of 
 - Shows CPU%, memory, temp, IP, uptime
 - Uses PIL bitmap font (`ImageFont.load_default(size=N)`) — no TrueType, no file I/O
 - Updates every ~2 seconds (`_stats_wake.wait(timeout=2)`)
-- **Tap anywhere to dismiss; long-press anywhere to power off**
-- `POWEROFF_Y_FRAC = 0.72` controls where the power-off button is drawn
+- **Tap anywhere to dismiss; long-press the red power-off button (bottom zone) to power off**
+- `POWEROFF_Y_FRAC = 0.72` controls where the power-off button is drawn **and** the Y threshold above which a long-press powers off; the shutdown itself runs on the main loop (via `_shutdown_req`), never on the touch thread
 - Fonts loaded once at module level via `_ensure_stats_fonts()` — not recreated each render
 - Layout constants in `stats.py` (`ROW_H`, `LBL_W`, etc.) are tuned for 320×240. If the display size changes, update them manually — the stats overlay is **not** auto-scaled.
 - **Do not use `anchor="rt"` with bitmap fonts** — it's silently ignored; use explicit `x = W - VAL_W + offset`
@@ -192,7 +192,7 @@ k2.when_pressed = lambda: toggle_stats_fn()  # short press = stats toggle
 # k3 handled in _k3_loop thread via k3.wait_for_press() → _nav_q.put(+1)
 ```
 
-**Shutdown via GPIO was removed.** Power off only via long-press on the stats overlay.
+**Shutdown via GPIO was removed.** Power off only via long-press on the stats overlay's power-off button.
 
 ## Dwell time
 

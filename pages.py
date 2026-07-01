@@ -46,6 +46,12 @@ def build_weather_page(store: DataStore) -> dict:
         ])
 
     weather = get_weather(store)
+    if not weather:
+        # Fetch has never succeeded — show an error instead of fabricated 0°F data
+        return _cfg_err("forecast", [
+            {"text": "Weather unavailable", "size": 2, "color": "red"},
+            {"text": "Check network connection", "size": 1, "color": "darkgrey"},
+        ])
     aqi     = get_aqi(store)
     lines: list[dict] = []
 
@@ -54,13 +60,14 @@ def build_weather_page(store: DataStore) -> dict:
     hourly = weather.get("hourly", {})
     now    = local_now(store.cfg)
 
-    temp    = cur.get("temperature_2m", 0)
-    wmo     = cur.get("weather_code", 0)
-    cur_hum = cur.get("relative_humidity_2m", 0)
-    cur_ws  = cur.get("wind_speed_10m", 0)
-    cur_wd  = cur.get("wind_direction_10m", 0)
-    hi   = (daily.get("temperature_2m_max") or [0])[0]
-    lo   = (daily.get("temperature_2m_min") or [0])[0]
+    # Open-Meteo returns null for values it can't provide — guard every field
+    temp    = cur.get("temperature_2m") or 0
+    wmo     = cur.get("weather_code") or 0
+    cur_hum = cur.get("relative_humidity_2m") or 0
+    cur_ws  = cur.get("wind_speed_10m") or 0
+    cur_wd  = cur.get("wind_direction_10m") or 0
+    hi   = (daily.get("temperature_2m_max") or [0])[0] or 0
+    lo   = (daily.get("temperature_2m_min") or [0])[0] or 0
 
     htimes    = hourly.get("time", [])
     htemps    = hourly.get("temperature_2m", [])
@@ -103,8 +110,8 @@ def build_weather_page(store: DataStore) -> dict:
         idx = time_idx.get(target.strftime("%Y-%m-%dT%H:%M"))
         if idx is None:
             continue
-        tp = htemps[idx] if idx < len(htemps) else 0
-        pp = int(hprec[idx]) if idx < len(hprec) else 0
+        tp = (htemps[idx] if idx < len(htemps) else 0) or 0
+        pp = int(hprec[idx] or 0) if idx < len(hprec) else 0
         label = target.strftime("%-I%p").lower()
         rain_color = ("cyan"   if pp >= 60 else
                       "yellow" if pp >= 40 else
@@ -480,6 +487,11 @@ def build_spotify_page(store: DataStore) -> dict | None:
 def build_display(store: DataStore) -> dict:
     state, return_date, event_title = get_work_state(store)
 
+    layout_pages = get_raw_layout().get("pages", {})
+
+    def _enabled(name: str) -> bool:
+        return (layout_pages.get(name) or {}).get("enabled", True)
+
     # One sky-driven gradient shared by every page this cycle (None = disabled).
     bg = _display_bg(store)
 
@@ -489,35 +501,36 @@ def build_display(store: DataStore) -> dict:
                 p.setdefault("bg", bg)
         return {"pages": pages, "display_mode": mode}
 
-    if state == "WFH":
-        return {"pages": [{"_name": "wfh", "title": "Working From Home", "lines": [
+    # Status pages honour the layout editor's per-page enabled toggle; when
+    # disabled, fall through to the normal rotation instead.
+    if state == "WFH" and _enabled("wfh"):
+        return _result([{"_name": "wfh", "title": "Working From Home", "lines": [
             {"text": "Working From Home", "size": 3, "color": "white"},
-        ]}], "display_mode": "WFH"}
+        ]}], "WFH")
 
-    if state == "OOO":
+    if state == "OOO" and _enabled("ooo"):
         ret_str = return_date.strftime("%a %b %-d") if return_date else ""
         lines   = [{"text": "Out of Office", "size": 3, "color": "white"}]
         if ret_str:
             lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
-        return {"pages": [{"_name": "ooo", "title": "Out of Office", "lines": lines}], "display_mode": "OOO"}
+        return _result([{"_name": "ooo", "title": "Out of Office", "lines": lines}], "OOO")
 
-    if state == "HOLIDAY":
+    if state == "HOLIDAY" and _enabled("holiday"):
         title_text = event_title or "Holiday"
-        return {"pages": [{"_name": "holiday", "title": "Holiday", "lines": [
+        return _result([{"_name": "holiday", "title": "Holiday", "lines": [
             {"text": title_text, "size": 3, "color": "white"},
-        ]}], "display_mode": "HOLIDAY"}
+        ]}], "HOLIDAY")
 
     tz = store.cfg.get("location", {}).get("timezone")
-    layout_pages = get_raw_layout().get("pages", {})
 
     pages = []
-    if layout_pages.get("clock", {}).get("enabled", True):
+    if _enabled("clock"):
         pages.append(build_clock_page(tz))
 
     for fn in (build_spotify_page, build_calendar_page, build_weather_page, build_commute_page):
         try:
             page = fn(store)
-            if page and layout_pages.get(page.get("_name", ""), {}).get("enabled", True):
+            if page and _enabled(page.get("_name", "")):
                 pages.append(page)
         except Exception as exc:
             print(f"[pages] {fn.__name__} failed: {exc}")

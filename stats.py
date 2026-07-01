@@ -14,7 +14,8 @@ except ImportError:
 
 from render import _img_to_rgb565
 
-# Taps at or below this Y-fraction trigger power-off
+# Long-presses at or below this Y-fraction trigger power-off; it is also where
+# the power-off button is drawn (work_display._on_long_press gates on it).
 POWEROFF_Y_FRAC = 0.72
 
 _TTF_PATHS = [

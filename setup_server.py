@@ -628,8 +628,19 @@ class SetupHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _read_body(self) -> bytes:
-        length = int(self.headers.get("Content-Length", 0))
+    # Largest legitimate body is a custom-image upload; cap well below what
+    # could exhaust the Pi's 512 MB of RAM (body is buffered in full).
+    _MAX_BODY_BYTES = 8 * 1024 * 1024
+
+    def _read_body(self) -> bytes | None:
+        """Read the request body, or send a 413 and return None if oversized."""
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length > self._MAX_BODY_BYTES:
+            self._send_json({"error": "Request body too large"}, 413)
+            return None
         return self.rfile.read(length) if length > 0 else b""
 
     def _send_icon(self, icon_name: str):
@@ -884,6 +895,8 @@ class SetupHandler(BaseHTTPRequestHandler):
         if not self._gate(path):
             return
         body = self._read_body()
+        if body is None:   # oversized — 413 already sent
+            return
 
         if path == "/api/auth/login":
             ip = self.client_address[0]

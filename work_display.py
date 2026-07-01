@@ -59,6 +59,10 @@ _sleep_dy: int    = 15
 _fetch_gate = threading.Event()
 _fetch_gate.set()
 
+# Set by the touch thread on a power-off long-press; the main loop performs the
+# actual shutdown so two threads never write the framebuffer concurrently.
+_shutdown_req = threading.Event()
+
 
 def _in_sleep_window(cfg: dict, now_dt) -> bool:
     sc = cfg.get("sleep", {})
@@ -140,7 +144,7 @@ def _do_shutdown(cfg: dict, layout: dict):
 # ── GPIO buttons ───────────────────────────────────────────────────────────────────
 
 def _start_button_threads(cfg: dict, layout: dict,
-                           advance_event: threading.Event,
+                           advance_fn,
                            toggle_stats_fn) -> bool:
     """Wire up GPIO buttons. Returns True if buttons initialised successfully."""
     btn_cfg = cfg.get("buttons", {})
@@ -157,7 +161,7 @@ def _start_button_threads(cfg: dict, layout: dict,
             while True:
                 k3.wait_for_press()
                 print("[button] next page")
-                advance_event.set()
+                advance_fn()
                 k3.wait_for_release()
                 time.sleep(0.1)
 
@@ -328,8 +332,6 @@ def main():
 
     store = DataStore(cfg)
 
-    advance_event = threading.Event()
-
     # ── Stats monitor (always running) ────────────────────────────────────────
     _stats_mon    = stats_mod.StatsMonitor()
     _stats_active = False
@@ -341,22 +343,13 @@ def main():
         print(f"[button] stats {'on' if _stats_active else 'off'}")
         _stats_wake.set()
 
-    _start_button_threads(cfg, layout, advance_event, _toggle_stats)
-    _start_fetch_threads(store)
-
     # ── Navigation queue (touch + GPIO button share it) ───────────────────────
     _nav_q: queue.Queue[int] = queue.Queue()
 
-    # Wire existing GPIO advance button into the nav queue
-    _orig_advance = advance_event
-
-    def _gpio_advance_watcher():
-        while True:
-            _orig_advance.wait()
-            _orig_advance.clear()
-            _nav_q.put(+1)
-
-    threading.Thread(target=_gpio_advance_watcher, daemon=True).start()
+    # K3 puts directly into the nav queue — an intermediate Event coalesced
+    # rapid presses (set/clear race dropped every second press).
+    _start_button_threads(cfg, layout, lambda: _nav_q.put(+1), _toggle_stats)
+    _start_fetch_threads(store)
 
     # ── Touch callbacks ───────────────────────────────────────────────────────
     def _on_tap(sx: int, sy: int) -> None:
@@ -370,7 +363,12 @@ def main():
     def _on_long_press(sx: int, sy: int) -> None:
         nonlocal _stats_active
         if _stats_active:
-            _do_shutdown(cfg, layout)
+            # Only the drawn power-off button (bottom of the overlay) powers
+            # off — a long-press elsewhere on the stats screen does nothing.
+            if sy >= int(H * stats_mod.POWEROFF_Y_FRAC):
+                _shutdown_req.set()
+                _stats_wake.set()   # wake the stats wait promptly
+                _nav_q.put(0)       # wake a page/sleep wait without navigating
         elif W // 3 <= sx <= 2 * W // 3:
             _stats_active = True
             _stats_wake.set()
@@ -424,6 +422,12 @@ def main():
     idx = 0
     _page_entered = time.time()
     while True:
+        # Power-off requested from the stats overlay — run it here on the main
+        # thread so the render loop can't overwrite the shutdown screens.
+        if _shutdown_req.is_set():
+            _do_shutdown(cfg, layout)
+            return
+
         layout = load_layout(font_path, display_w=W, display_h=H)
 
         # ── Sleep mode ────────────────────────────────────────────────────────
@@ -485,6 +489,10 @@ def main():
         dwell  = int(layout.get("pages", {}).get(_pname, {}).get("dwell_seconds") or default_dwell)
 
         if _stats_active:
+            # Release the Spotify hold — otherwise, if stats was toggled while
+            # the Spotify page was showing, every other fetch thread stays
+            # blocked in _wait_for_spotify_clear() until stats is dismissed.
+            _spotify_page_active = False
             try:
                 sf = stats_mod.render_stats_rgb565(
                     _stats_mon, W, H, rot == 180)

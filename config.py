@@ -151,7 +151,8 @@ def save(cfg: dict) -> None:
 def is_complete(cfg: dict) -> bool:
     """Return True if all required fields are filled."""
     for section, key in _REQUIRED:
-        if not (cfg.get(section) or {}).get(key, "").strip():
+        # str() guards against JSON null (None.strip() would crash at startup)
+        if not str((cfg.get(section) or {}).get(key) or "").strip():
             return False
     return True
 
