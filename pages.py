@@ -219,8 +219,10 @@ def build_calendar_page(store: DataStore) -> dict | None:
         future = []
         for ev in events:
             try:
+                s = datetime.fromisoformat(ev["start_iso"])
                 e = datetime.fromisoformat(ev["end_iso"])
-                if e > now:
+                # All-day: include if still ongoing (e > now). Timed: only if not yet started.
+                if ev.get("all_day") and e > now or not ev.get("all_day") and s > now:
                     future.append(ev)
             except Exception:
                 pass
