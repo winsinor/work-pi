@@ -19,7 +19,8 @@ if [ -f "$INSTALL_DIR/work_layout.json" ]; then
 fi
 
 echo "==> Pulling latest …"
-git pull origin main
+git fetch origin main
+sudo git reset --hard origin/main
 
 echo "==> Syncing to $INSTALL_DIR …"
 sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' \
