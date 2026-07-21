@@ -36,6 +36,11 @@ if [ ! -f "$INSTALL_DIR/work_layout.json" ]; then
     sudo cp "$REPO/work_layout.json" "$INSTALL_DIR/work_layout.json"
 fi
 
+# Merge any new page entries added to the repo layout into the install dir copy
+# without touching entries the user has already customized.
+echo "==> Merging new layout entries …"
+sudo python3 "$REPO/merge_layout.py" "$REPO/work_layout.json" "$INSTALL_DIR/work_layout.json"
+
 echo "==> Restarting $SERVICE …"
 sudo systemctl restart "$SERVICE"
 
