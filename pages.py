@@ -487,7 +487,7 @@ def build_spotify_page(store: DataStore) -> dict | None:
 
 
 def build_display(store: DataStore) -> dict:
-    state, return_date, event_title = get_work_state(store)
+    state, return_date, event_title, event_location = get_work_state(store)
 
     layout_pages = get_raw_layout().get("pages", {})
 
@@ -518,8 +518,9 @@ def build_display(store: DataStore) -> dict:
         return {"pages": [{"_name": "ooo", "title": "Out of Office", "lines": lines}], "display_mode": "OOO"}
 
     if state == "TRAVEL" and _enabled("travel"):
-        ret_str = return_date.strftime("%a %b %-d") if return_date else ""
-        lines   = [{"text": "Traveling for Work", "size": 3, "color": "white"}]
+        ret_str    = return_date.strftime("%a %b %-d") if return_date else ""
+        header     = f"Traveling to {event_location}" if event_location else "Traveling for Work"
+        lines      = [{"text": header, "size": 3, "color": "white", "wrap": True}]
         if ret_str:
             lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
         return {"pages": [{"_name": "travel", "title": "Traveling for Work", "lines": lines}], "display_mode": "TRAVEL"}

@@ -424,6 +424,13 @@ def get_ics_events(store: DataStore) -> list[dict]:
 
 # ── Work state (WFH / OOO / HOLIDAY / NORMAL) ───────────────────────────────────────
 
+def _next_weekday(d) -> object:
+    """Return d advanced past any weekend days (Sat/Sun → Mon)."""
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
 def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
                         holiday_kw: list[str] | None = None,
                         local_tz=None) -> object:
@@ -459,13 +466,13 @@ def _advance_to_workday(cal, d, ooo_kw: list[str] | None = None,
     return d
 
 
-def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
-    """Return (state, return_date, event_title). state is NORMAL|WFH|OOO|HOLIDAY."""
+def fetch_work_state(store: DataStore) -> tuple[str, object, str | None, str]:
+    """Return (state, return_date, event_title, event_location)."""
     cfg     = store.cfg
     ics_url = cfg["calendar"].get("ics_url", "").strip()
 
     if not ics_url or not _ICS_AVAILABLE:
-        return "NORMAL", None, None
+        return "NORMAL", None, None, ""
 
     wfh_kw     = [k.lower() for k in cfg.get("wfh_keywords",    ["wfh", "working from home"])]
     ooo_kw     = [k.lower() for k in cfg.get("ooo_keywords",    ["ooo", "out of office", "pto"])]
@@ -480,9 +487,10 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
     day_end   = datetime.combine(today + timedelta(days=1), datetime.min.time())
     raw       = recurring_ical_events.of(cal).between(day_start, day_end)
 
-    new_state  = "NORMAL"
-    new_return = None
-    new_title  = None
+    new_state    = "NORMAL"
+    new_return   = None
+    new_title    = None
+    new_location = ""
 
     tz_name  = cfg.get("location", {}).get("timezone")
     local_tz = ZoneInfo(tz_name) if (ZoneInfo and tz_name) else None
@@ -504,14 +512,25 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
             continue
         tl = title.lower()
 
-        # Priority: HOLIDAY > OOO > WFH. Don't break early — a later event in
-        # the ICS file may have higher priority than an already-matched one.
-        if any(k in tl for k in holiday_kw):
+        # Priority: TRAVEL > HOLIDAY > OOO > WFH. Don't break early for lower
+        # states — a later event in the ICS file may have higher priority.
+        if any(k in tl for k in travel_kw):
+            dtend = component.get("DTEND")
+            ev    = dtend.dt if dtend else today + timedelta(days=1)
+            if isinstance(ev, datetime):
+                if hasattr(ev, "tzinfo") and ev.tzinfo:
+                    ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
+                ev = ev.date()
+            new_state    = "TRAVEL"
+            new_return   = _next_weekday(ev)
+            new_location = str(component.get("LOCATION", "") or "").strip()
+            break  # TRAVEL is top priority; stop scanning
+        if any(k in tl for k in holiday_kw) and new_state != "TRAVEL":
             new_state  = "HOLIDAY"
             new_title  = title
             new_return = None
-            break  # nothing can beat HOLIDAY
-        if any(k in tl for k in ooo_kw) and new_state != "HOLIDAY":
+            # don't break — a TRAVEL event may still appear later
+        elif any(k in tl for k in ooo_kw) and new_state not in ("TRAVEL", "HOLIDAY"):
             dtend = component.get("DTEND")
             ev    = dtend.dt if dtend else today + timedelta(days=1)
             if isinstance(ev, datetime):
@@ -519,30 +538,22 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
                     ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
                 ev = ev.date()
             new_state  = "OOO"
-            new_return = _advance_to_workday(cal, ev, ooo_kw + travel_kw, holiday_kw, local_tz)
-        elif any(k in tl for k in travel_kw) and new_state not in ("HOLIDAY", "OOO"):
-            dtend = component.get("DTEND")
-            ev    = dtend.dt if dtend else today + timedelta(days=1)
-            if isinstance(ev, datetime):
-                if hasattr(ev, "tzinfo") and ev.tzinfo:
-                    ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
-                ev = ev.date()
-            new_state  = "TRAVEL"
-            new_return = _advance_to_workday(cal, ev, ooo_kw + travel_kw, holiday_kw, local_tz)
+            new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw, local_tz)
         elif any(k in tl for k in wfh_kw) and new_state == "NORMAL":
             new_state = "WFH"
 
-    return new_state, new_return, new_title
+    return new_state, new_return, new_title, new_location
 
 
-def get_work_state(store: DataStore) -> tuple[str, object, str | None]:
+def get_work_state(store: DataStore) -> tuple[str, object, str | None, str]:
     """Cached work state; retains last known state on fetch error."""
     if not store.work_state.fresh():
         try:
-            state, ret, title = fetch_work_state(store)
+            state, ret, title, location = fetch_work_state(store)
             store.work_state.set(state)
-            store.work_state._return_date = ret
-            store.work_state._event_title = title
+            store.work_state._return_date   = ret
+            store.work_state._event_title   = title
+            store.work_state._event_location = location
         except Exception as exc:
             print(f"[work-state] ICS scan failed: {exc}")
             store.work_state.fetched_at = time.time()  # back off
@@ -550,6 +561,7 @@ def get_work_state(store: DataStore) -> tuple[str, object, str | None]:
         store.work_state.get() or "NORMAL",
         getattr(store.work_state, "_return_date", None),
         getattr(store.work_state, "_event_title", None),
+        getattr(store.work_state, "_event_location", ""),
     )
 
 
