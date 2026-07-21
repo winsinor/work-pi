@@ -113,6 +113,7 @@ LAYOUT_DEFAULTS: dict = {
         "wfh":      [{"x": 160, "y": None, "h": 28}],
         "ooo":      [{"x": None, "y": 110, "h": 34}, {"x": None, "y": 147, "h": 13}],
         "holiday":  [{"x": None, "y": None, "h": 26}],
+        "travel":   [{"x": None, "y": 110, "h": 34}, {"x": None, "y": 147, "h": 13}],
         "setup":    [{"x": None, "y": None, "h": 17}, {"x": None, "y": None, "h": 17}, {"x": None, "y": None, "h": 23}, {"x": None, "y": None, "h": 13}],
         "loading":  [{"x": None, "y": None, "h": 17}],
         "error":    [{"x": None, "y": None, "h": 17}],
