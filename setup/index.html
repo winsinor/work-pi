@@ -354,6 +354,11 @@
         <div class="tags-wrap" id="tags-holiday"></div>
         <p class="hint">e.g. <em>holiday</em></p>
       </div>
+      <div class="field">
+        <label>Travel keywords</label>
+        <div class="tags-wrap" id="tags-travel"></div>
+        <p class="hint">e.g. <em>work trip</em>, <em>travel</em></p>
+      </div>
     </div>
   </div>
 
@@ -861,6 +866,7 @@ function escHtml(s) {
 const tagWfh     = initTags('tags-wfh');
 const tagOoo     = initTags('tags-ooo');
 const tagHoliday = initTags('tags-holiday');
+const tagTravel  = initTags('tags-travel');
 
 function bindRange(id, labelId, fmt) {
   const el = $(id), lbl = $(labelId);
@@ -948,6 +954,7 @@ function populateForm(cfg) {
   tagWfh.set(cfg.wfh_keywords || []);
   tagOoo.set(cfg.ooo_keywords || []);
   tagHoliday.set(cfg.holiday_keywords || []);
+  tagTravel.set(cfg.travel_keywords || []);
 
   $('disp-width').value    = cfg.display?.width    || 480;
   $('disp-height').value   = cfg.display?.height   || 320;
@@ -1038,6 +1045,7 @@ function collectForm() {
     wfh_keywords:     tagWfh.get(),
     ooo_keywords:     tagOoo.get(),
     holiday_keywords: tagHoliday.get(),
+    travel_keywords:  tagTravel.get(),
     display: {
       width:        +$('disp-width').value,
       height:       +$('disp-height').value,

@@ -90,9 +90,10 @@ DEFAULTS: dict = {
         "Work → Home",
         "Work → Waypoint → Home",
     ],
-    "wfh_keywords": ["wfh", "working from home"],
-    "ooo_keywords": ["ooo", "out of office", "pto"],
+    "wfh_keywords":    ["wfh", "working from home"],
+    "ooo_keywords":    ["ooo", "out of office", "pto"],
     "holiday_keywords": ["holiday"],
+    "travel_keywords": ["work trip", "travel"],
 }
 
 # Fields that must be non-empty for the display to start

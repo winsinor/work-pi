@@ -498,9 +498,10 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
     if not ics_url or not _ICS_AVAILABLE:
         return "NORMAL", None, None
 
-    wfh_kw     = [k.lower() for k in cfg.get("wfh_keywords", ["wfh", "working from home"])]
-    ooo_kw     = [k.lower() for k in cfg.get("ooo_keywords", ["ooo", "out of office", "pto"])]
+    wfh_kw     = [k.lower() for k in cfg.get("wfh_keywords",    ["wfh", "working from home"])]
+    ooo_kw     = [k.lower() for k in cfg.get("ooo_keywords",    ["ooo", "out of office", "pto"])]
     holiday_kw = [k.lower() for k in cfg.get("holiday_keywords", ["holiday"])]
+    travel_kw  = [k.lower() for k in cfg.get("travel_keywords",  ["work trip", "travel"])]
 
     r = requests.get(ics_url, timeout=15)
     r.raise_for_status()
@@ -549,7 +550,16 @@ def fetch_work_state(store: DataStore) -> tuple[str, object, str | None]:
                     ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
                 ev = ev.date()
             new_state  = "OOO"
-            new_return = _advance_to_workday(cal, ev, ooo_kw, holiday_kw, local_tz)
+            new_return = _advance_to_workday(cal, ev, ooo_kw + travel_kw, holiday_kw, local_tz)
+        elif any(k in tl for k in travel_kw) and new_state not in ("HOLIDAY", "OOO"):
+            dtend = component.get("DTEND")
+            ev    = dtend.dt if dtend else today + timedelta(days=1)
+            if isinstance(ev, datetime):
+                if hasattr(ev, "tzinfo") and ev.tzinfo:
+                    ev = ev.astimezone(local_tz).replace(tzinfo=None) if local_tz else ev.astimezone().replace(tzinfo=None)
+                ev = ev.date()
+            new_state  = "TRAVEL"
+            new_return = _advance_to_workday(cal, ev, ooo_kw + travel_kw, holiday_kw, local_tz)
         elif any(k in tl for k in wfh_kw) and new_state == "NORMAL":
             new_state = "WFH"
 

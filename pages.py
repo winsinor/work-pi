@@ -496,22 +496,29 @@ def build_display(store: DataStore) -> dict:
         return {"pages": pages, "display_mode": mode}
 
     if state == "WFH":
-        return _result([{"_name": "wfh", "title": "Working From Home", "lines": [
+        return {"pages": [{"_name": "wfh", "title": "Working From Home", "lines": [
             {"text": "Working From Home", "size": 3, "color": "white"},
-        ]}], "WFH")
+        ]}], "display_mode": "WFH"}
 
     if state == "OOO":
         ret_str = return_date.strftime("%a %b %-d") if return_date else ""
         lines   = [{"text": "Out of Office", "size": 3, "color": "white"}]
         if ret_str:
             lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
-        return _result([{"_name": "ooo", "title": "Out of Office", "lines": lines}], "OOO")
+        return {"pages": [{"_name": "ooo", "title": "Out of Office", "lines": lines}], "display_mode": "OOO"}
+
+    if state == "TRAVEL":
+        ret_str = return_date.strftime("%a %b %-d") if return_date else ""
+        lines   = [{"text": "Traveling for Work", "size": 3, "color": "white"}]
+        if ret_str:
+            lines.append({"text": f"Returning on {ret_str}", "size": 1, "color": "cyan"})
+        return {"pages": [{"_name": "travel", "title": "Traveling for Work", "lines": lines}], "display_mode": "TRAVEL"}
 
     if state == "HOLIDAY":
         title_text = event_title or "Holiday"
-        return _result([{"_name": "holiday", "title": "Holiday", "lines": [
+        return {"pages": [{"_name": "holiday", "title": "Holiday", "lines": [
             {"text": title_text, "size": 3, "color": "white"},
-        ]}], "HOLIDAY")
+        ]}], "display_mode": "HOLIDAY"}
 
     tz = store.cfg.get("location", {}).get("timezone")
     layout_pages = get_raw_layout().get("pages", {})

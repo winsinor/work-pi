@@ -488,6 +488,14 @@ _DEMO_PAGES: dict = {
             {"text": "Returning Mon Jan 20", "size": 1, "color": "cyan"},
         ],
     },
+    "travel": {
+        "_name": "travel",
+        "title": "Traveling for Work",
+        "lines": [
+            {"text": "Traveling for Work",   "size": 3, "color": "white"},
+            {"text": "Returning Mon Jan 20", "size": 1, "color": "cyan"},
+        ],
+    },
     "holiday": {
         "_name": "holiday",
         "title": "Holiday",

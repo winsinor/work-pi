@@ -87,5 +87,6 @@
   ],
   "wfh_keywords":     ["wfh", "working from home"],
   "ooo_keywords":     ["ooo", "out of office", "pto"],
-  "holiday_keywords": ["holiday"]
+  "holiday_keywords": ["holiday"],
+  "travel_keywords":  ["work trip", "travel"]
 }
