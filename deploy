@@ -8,11 +8,13 @@ SERVICE="work-dashboard"
 
 cd "$REPO"
 
-BACKUP_FILE="$REPO/work_layout.backup.json"
+# Layout backup: save to home dir (outside the repo, outside the install dir)
+# so neither git operations nor rsync can ever touch it.
+BACKUP_FILE="/home/pi/work_layout.backup.json"
 
-# Back up any layout-editor changes made on the Pi to a local file on the SD
-# card *before* pulling, so an incoming update can never lose them. Purely
-# local — no git involved, so it can't fail on missing git identity/network.
+# Back up the live layout before anything else runs.
+# The install dir's work_layout.json is the authoritative copy — it's never
+# touched by rsync (excluded below) and never touched by git (different dir).
 if [ -f "$INSTALL_DIR/work_layout.json" ]; then
     echo "==> Backing up work_layout.json to $BACKUP_FILE …"
     sudo rsync -a --chown=pi:pi "$INSTALL_DIR/work_layout.json" "$BACKUP_FILE"
@@ -23,10 +25,12 @@ git fetch origin main
 sudo git reset --hard origin/main
 
 echo "==> Syncing to $INSTALL_DIR …"
+# work_layout.json is intentionally excluded — the install dir's copy is the
+# live layout edited via the editor and must never be overwritten by a deploy.
 sudo rsync -a --exclude='.git' --exclude='config.json' --exclude='work_layout.json' --exclude='__pycache__' \
     "$REPO/" "$INSTALL_DIR/"
 
-# Seed layout on first deploy only — never overwrite user's saved layout
+# Seed layout on first deploy only — never overwrite user's saved layout.
 if [ ! -f "$INSTALL_DIR/work_layout.json" ]; then
     echo "==> Seeding work_layout.json from repo …"
     sudo cp "$REPO/work_layout.json" "$INSTALL_DIR/work_layout.json"
