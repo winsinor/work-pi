@@ -5,14 +5,14 @@
 const WEATHER_ICONS = ["sun","cloud","partly_cloudy","rain","heavy_rain",
                        "thunderstorm","snow","fog"];
 
-const PAGE_NAMES = ["clock","forecast","calendar","commute","wfh","ooo","holiday","spotify"];
+const PAGE_NAMES = ["clock","forecast","calendar","commute","wfh","ooo","holiday","travel","spotify"];
 const PAGE_LABELS = {
   clock:"Clock", forecast:"Forecast", calendar:"Calendar",
   commute:"Commute", wfh:"WFH", ooo:"OOO", holiday:"Holiday",
-  spotify:"Spotify",
+  travel:"Travel", spotify:"Spotify",
 };
 
-const CALENDAR_DRIVEN_PAGES = ["wfh","ooo","holiday"];
+const CALENDAR_DRIVEN_PAGES = ["wfh","ooo","holiday","travel"];
 const MARQUEE_PAGES          = ["spotify","calendar"];
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -570,6 +570,7 @@ const PAGE_LINE_LABELS = {
   wfh:            ["Status text"],
   ooo:            ["Status text",   "Return date"],
   holiday:        ["Event name"],
+  travel:         ["Destination",   "Return date"],
 };
 
 function buildPageProps(name) {
